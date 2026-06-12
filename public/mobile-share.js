@@ -65,19 +65,32 @@
   }
 
   function cleanTeamName(text) {
-    return (text || "Por definir").replace(/\s+/g, " ").trim();
+    return (text || "Por definir").replace(/\s+/g, " ").replace(/^Avanza\s+/i, "").trim();
   }
 
   function parseCard(card) {
     const teams = Array.from(card.querySelectorAll(".ko-team"));
+    const homeName = cleanTeamName(teams[0]?.querySelector("span")?.textContent || "");
+    const awayName = cleanTeamName(teams[1]?.querySelector("span")?.textContent || "");
+    const homeScore = teams[0]?.querySelector("input")?.value || "-";
+    const awayScore = teams[1]?.querySelector("input")?.value || "-";
+    const advanceText = cleanTeamName(card.querySelector("small")?.textContent || "");
+    const homeNumber = Number(homeScore);
+    const awayNumber = Number(awayScore);
+    let winnerName = /^Pendiente$/i.test(advanceText) ? "" : advanceText;
+    if (!winnerName && Number.isFinite(homeNumber) && Number.isFinite(awayNumber) && homeNumber !== awayNumber) {
+      winnerName = homeNumber > awayNumber ? homeName : awayName;
+    }
+
     return {
       label: card.querySelector(".ko-title")?.textContent?.trim() || "",
-      homeName: cleanTeamName(teams[0]?.querySelector("span")?.textContent || ""),
-      awayName: cleanTeamName(teams[1]?.querySelector("span")?.textContent || ""),
+      homeName,
+      awayName,
+      winnerName,
       homeFlag: teams[0]?.querySelector("img")?.getAttribute("src") || "",
       awayFlag: teams[1]?.querySelector("img")?.getAttribute("src") || "",
-      homeScore: teams[0]?.querySelector("input")?.value || "-",
-      awayScore: teams[1]?.querySelector("input")?.value || "-",
+      homeScore,
+      awayScore,
     };
   }
 
@@ -117,6 +130,10 @@
       if (match.awayFlag) sources.add(match.awayFlag);
     });
     return [...sources];
+  }
+
+  function sameTeam(a, b) {
+    return cleanTeamName(a).toLowerCase() === cleanTeamName(b).toLowerCase();
   }
 
   function drawFlag(ctx, image, x, y, width, height) {
@@ -190,25 +207,31 @@
     const sourceRounds = side === "left" ? rounds : rounds.slice().reverse();
     const xs = side === "left" ? leftXs : rightXs;
     const accents = ["#3b82f6", "#60a5fa", "#818cf8", "#f59e0b"];
+    const drawn = [];
+
     sourceRounds.forEach((round, roundIndex) => {
       const x = xs[roundIndex];
       drawText(ctx, shortLabel(round.label), x + cardW / 2, 576, "900 17px Arial", "#dbeafe", "center");
-      round.matches.forEach((match, index) => {
+      drawn[roundIndex] = round.matches.map((match, index) => {
         const y = roundPosition(round.matches.length, index, cardH);
         drawMiniMatch(ctx, match, images, x, y, cardW, cardH, accents[roundIndex]);
+        return { match, x, y, midY: y + cardH / 2 };
       });
     });
+
     for (let i = 0; i < 3; i += 1) {
-      const current = sourceRounds[i]?.matches || [];
-      const next = sourceRounds[i + 1]?.matches || [];
-      current.forEach((_, index) => {
-        const pairIndex = Math.floor(index / 2);
-        if (!next[pairIndex]) return;
-        const x1 = side === "left" ? xs[i] + cardW : xs[i];
-        const x2 = side === "left" ? xs[i + 1] : xs[i + 1] + cardW;
-        const y1 = roundPosition(current.length, index, cardH) + cardH / 2;
-        const y2 = roundPosition(next.length, pairIndex, cardH) + cardH / 2;
-        drawConnector(ctx, x1, y1, x2, y2);
+      const current = drawn[i] || [];
+      const next = drawn[i + 1] || [];
+      current.forEach((item, index) => {
+        const winner = item.match.winnerName;
+        let target = winner
+          ? next.find((candidate) => sameTeam(candidate.match.homeName, winner) || sameTeam(candidate.match.awayName, winner))
+          : undefined;
+        if (!target) target = next[Math.floor(index / 2)];
+        if (!target) return;
+        const fromX = side === "left" ? item.x + cardW : item.x;
+        const toX = side === "left" ? target.x : target.x + cardW;
+        drawConnector(ctx, fromX, item.midY, toX, target.midY);
       });
     }
   }
@@ -267,7 +290,7 @@
     drawText(ctx, trimText(ctx, championName, 220), 748, 106, "900 29px Arial", "#ffffff");
     drawChampion(ctx, championName, images.get(championFlag));
     drawText(ctx, "Bracket completo", 70, 482, "900 30px Arial", "#f8fafc");
-    drawText(ctx, "16vos incluidos · banderas y marcadores compactos", 70, 516, "700 20px Arial", "#9fb4cc");
+    drawText(ctx, "Cruces conectados por equipo ganador", 70, 516, "700 20px Arial", "#9fb4cc");
     fillRound(ctx, 16, 536, 1048, 624, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
     drawSide(ctx, data.leftRounds, images, "left");
     drawSide(ctx, data.rightRounds, images, "right");
