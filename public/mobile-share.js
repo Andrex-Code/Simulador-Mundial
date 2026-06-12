@@ -142,24 +142,25 @@
   }
 
   function drawCenterMatch(ctx, match, images, x, y, title, accent) {
-    const width = 220;
-    const height = 104;
-    fillRound(ctx, x, y, width, height, 18, "rgba(8, 54, 50, 0.94)", "rgba(45, 212, 191, 0.42)");
-    fillRound(ctx, x, y, 7, height, 18, accent);
-    drawText(ctx, title, x + 18, y + 24, "900 15px Arial", "#a8bbd2");
+    const width = 224;
+    const height = 118;
+    fillRound(ctx, x, y, width, height, 20, "rgba(8, 54, 50, 0.94)", "rgba(45, 212, 191, 0.42)");
+    fillRound(ctx, x, y, 7, height, 20, accent);
+    fillRound(ctx, x + 16, y + 12, title.length > 6 ? 108 : 70, 24, 12, "rgba(2, 12, 27, 0.50)");
+    drawText(ctx, title, x + 26, y + 30, "900 15px Arial", "#cbd5e1");
 
     const flagW = 34;
     const flagH = 24;
-    const nameX = x + 62;
+    const nameX = x + 64;
     const scoreX = x + width - 20;
-    const row1 = y + 38;
-    const row2 = y + 70;
-    drawFlag(ctx, images.get(match.homeFlag), x + 18, row1 - 18, flagW, flagH);
-    drawFlag(ctx, images.get(match.awayFlag), x + 18, row2 - 18, flagW, flagH);
-    drawText(ctx, trimText(ctx, match.homeName, 96), nameX, row1 + 1, "800 18px Arial", "#f8fafc");
-    drawText(ctx, trimText(ctx, match.awayName, 96), nameX, row2 + 1, "800 18px Arial", "#f8fafc");
-    drawText(ctx, match.homeScore, scoreX, row1 + 1, "900 22px Arial", "#fbbf24", "right");
-    drawText(ctx, match.awayScore, scoreX, row2 + 1, "900 22px Arial", "#fbbf24", "right");
+    const row1 = y + 62;
+    const row2 = y + 94;
+    drawFlag(ctx, images.get(match.homeFlag), x + 20, row1 - 20, flagW, flagH);
+    drawFlag(ctx, images.get(match.awayFlag), x + 20, row2 - 20, flagW, flagH);
+    drawText(ctx, trimText(ctx, match.homeName, 98), nameX, row1, "800 18px Arial", "#f8fafc");
+    drawText(ctx, trimText(ctx, match.awayName, 98), nameX, row2, "800 18px Arial", "#f8fafc");
+    drawText(ctx, match.homeScore, scoreX, row1, "900 22px Arial", "#fbbf24", "right");
+    drawText(ctx, match.awayScore, scoreX, row2, "900 22px Arial", "#fbbf24", "right");
   }
 
   function drawConnector(ctx, fromX, fromY, toX, toY) {
@@ -274,19 +275,19 @@
 
     drawText(ctx, "Bracket completo", 70, 482, "900 30px Arial", "#f8fafc");
     drawText(ctx, "16vos incluidos · banderas y marcadores compactos", 70, 516, "700 20px Arial", "#9fb4cc");
-    fillRound(ctx, 24, 544, 1032, 606, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
+    fillRound(ctx, 16, 536, 1048, 624, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
 
     drawSide(ctx, data.leftRounds, images, "left");
     drawSide(ctx, data.rightRounds, images, "right");
 
     const third = data.finalCards.find((card) => /tercer/i.test(card.label)) || data.finalCards[0];
     const final = data.finalCards.find((card) => /final/i.test(card.label)) || data.finalCards[1];
-    if (third) drawCenterMatch(ctx, third, images, 430, 652, "3er puesto", "#64748b");
-    fillRound(ctx, 454, 782, 172, 110, 24, "rgba(8, 47, 73, 0.94)", "rgba(251, 191, 36, 0.46)");
-    drawText(ctx, "CAMPEÓN", 540, 812, "900 15px Arial", "#fbbf24", "center");
-    drawFlag(ctx, images.get(championFlag), 502, 824, 76, 52);
-    drawText(ctx, trimText(ctx, championName, 148), 540, 883, "900 22px Arial", "#ffffff", "center");
-    if (final) drawCenterMatch(ctx, final, images, 430, 920, "Final", "#fbbf24");
+    if (third) drawCenterMatch(ctx, third, images, 428, 642, "3er puesto", "#64748b");
+    fillRound(ctx, 456, 780, 168, 132, 24, "rgba(8, 47, 73, 0.94)", "rgba(251, 191, 36, 0.46)");
+    drawText(ctx, "CAMPEÓN", 540, 808, "900 15px Arial", "#fbbf24", "center");
+    drawFlag(ctx, images.get(championFlag), 506, 820, 68, 46);
+    drawText(ctx, trimText(ctx, championName, 150), 540, 898, "900 22px Arial", "#ffffff", "center");
+    if (final) drawCenterMatch(ctx, final, images, 428, 936, "Final", "#fbbf24");
 
     fillRound(ctx, 70, 1216, 940, 72, 24, "rgba(255,255,255,0.05)", "rgba(255,255,255,0.12)");
     drawText(ctx, "Haz tu predicción en", SHARE_WIDTH / 2, 1246, "700 20px Arial", "#9fb4cc", "center");
