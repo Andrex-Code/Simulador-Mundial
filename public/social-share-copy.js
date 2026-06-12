@@ -20,23 +20,17 @@
     return `${window.location.origin}${window.location.pathname}${window.location.hash || ""}`;
   }
 
-  function getWhatsappText(shareUrl) {
+  function getViralText(shareUrl, includeLink = true) {
     const championName = getChampionName();
-    return [
+    const lines = [
       "Yo ya hice mi simulación del Mundial 2026 🏆",
       `Me salió campeón: ${championName}`,
+      "",
       "A ver si a ti te da el mismo resultado 👀👇",
-      shareUrl,
-    ].join("\n");
-  }
+    ];
 
-  function getFacebookText(shareUrl) {
-    const championName = getChampionName();
-    return [
-      `Esto dice mi bracket del Mundial 2026: ${championName} campeón 🏆`,
-      "Haz el tuyo y etiqueta a alguien que crea que sabe más de fútbol que tú 👀👇",
-      shareUrl,
-    ].join("\n");
+    if (includeLink) lines.push(shareUrl);
+    return lines.join("\n");
   }
 
   if (navigator.share) {
@@ -46,8 +40,7 @@
       return nativeShare({
         ...data,
         title: "Mi simulación del Mundial 2026",
-        text: getWhatsappText(shareUrl),
-        url: shareUrl,
+        text: getViralText(shareUrl, true),
       });
     };
   }
@@ -59,7 +52,7 @@
       if (parsed.hostname.includes("facebook.com") && parsed.pathname.includes("/sharer")) {
         const shareUrl = parsed.searchParams.get("u") || getShareUrl();
         parsed.searchParams.set("u", shareUrl);
-        parsed.searchParams.set("quote", getFacebookText(shareUrl));
+        parsed.searchParams.set("quote", getViralText(shareUrl, false));
         return nativeOpen(parsed.toString(), target, features);
       }
     } catch {
