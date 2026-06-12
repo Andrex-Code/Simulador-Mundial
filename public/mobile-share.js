@@ -4,6 +4,22 @@
   const MOBILE_MAX_WIDTH = 720;
   const previousToBlob = HTMLCanvasElement.prototype.toBlob;
 
+  function normalizeFlagSrc(value) {
+    if (!value) return "";
+    if (/^(https?:|data:|blob:)/i.test(value)) return value;
+    return `https://flagcdn.com/w80/${String(value).trim().toLowerCase()}.png`;
+  }
+
+  function readSharePayload(canvas) {
+    const raw = canvas?.dataset?.sharePayload;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
   function roundedRect(ctx, x, y, width, height, radius) {
     const safeRadius = Math.min(radius, width / 2, height / 2);
     ctx.beginPath();
@@ -35,7 +51,9 @@
   function trimText(ctx, text, maxWidth) {
     if (ctx.measureText(text).width <= maxWidth) return text;
     let output = text;
-    while (output.length > 3 && ctx.measureText(`${output}...`).width > maxWidth) output = output.slice(0, -1);
+    while (output.length > 3 && ctx.measureText(`${output}...`).width > maxWidth) {
+      output = output.slice(0, -1);
+    }
     return `${output}...`;
   }
 
@@ -50,17 +68,19 @@
     });
   }
 
-  function getChampionName() {
+  function getChampionName(payload) {
+    if (payload?.championName) return payload.championName;
     const selectors = [".champion-mark strong .team-label span:last-child", ".champion-mark strong", ".hero-card strong"];
     for (const selector of selectors) {
       const element = document.querySelector(selector);
-      const text = element?.textContent?.replace("Campeón:", "").trim();
+      const text = element?.textContent?.replace("CampeÃ³n:", "").trim();
       if (text && !/por definir/i.test(text)) return text;
     }
     return "Por definir";
   }
 
-  function getChampionFlagSrc() {
+  function getChampionFlagSrc(payload) {
+    if (payload?.championFlag) return normalizeFlagSrc(payload.championFlag);
     return document.querySelector(".champion-mark strong .flag-img, .hero-card .flag-img")?.getAttribute("src") || "";
   }
 
@@ -87,8 +107,8 @@
       homeName,
       awayName,
       winnerName,
-      homeFlag: teams[0]?.querySelector("img")?.getAttribute("src") || "",
-      awayFlag: teams[1]?.querySelector("img")?.getAttribute("src") || "",
+      homeFlag: card.querySelectorAll(".ko-team")[0]?.querySelector("img")?.getAttribute("src") || "",
+      awayFlag: card.querySelectorAll(".ko-team")[1]?.querySelector("img")?.getAttribute("src") || "",
       homeScore,
       awayScore,
     };
@@ -101,7 +121,15 @@
     };
   }
 
-  function getShareData() {
+  function getShareData(payload) {
+    if (payload?.rounds) {
+      return {
+        leftRounds: payload.rounds.filter((round) => round.side === "left"),
+        rightRounds: payload.rounds.filter((round) => round.side === "right"),
+        finalCards: payload.rounds.filter((round) => round.side === "center").flatMap((round) => round.matches),
+      };
+    }
+
     return {
       leftRounds: Array.from(document.querySelectorAll(".bracket-side.left .bracket-round")).map(parseRound),
       rightRounds: Array.from(document.querySelectorAll(".bracket-side.right .bracket-round")).map(parseRound),
@@ -118,16 +146,16 @@
   }
 
   function collectSources(data, championFlag) {
-    const sources = new Set(championFlag ? [championFlag] : []);
+    const sources = new Set(championFlag ? [normalizeFlagSrc(championFlag)] : []);
     [...data.leftRounds, ...data.rightRounds].forEach((round) => {
       round.matches.forEach((match) => {
-        if (match.homeFlag) sources.add(match.homeFlag);
-        if (match.awayFlag) sources.add(match.awayFlag);
+        if (match.homeFlag) sources.add(normalizeFlagSrc(match.homeFlag));
+        if (match.awayFlag) sources.add(normalizeFlagSrc(match.awayFlag));
       });
     });
     data.finalCards.forEach((match) => {
-      if (match.homeFlag) sources.add(match.homeFlag);
-      if (match.awayFlag) sources.add(match.awayFlag);
+      if (match.homeFlag) sources.add(normalizeFlagSrc(match.homeFlag));
+      if (match.awayFlag) sources.add(normalizeFlagSrc(match.awayFlag));
     });
     return [...sources];
   }
@@ -152,8 +180,8 @@
     const flagW = 34;
     const flagH = 23;
     const scoreX = flagX + flagW + 13;
-    drawFlag(ctx, images.get(match.homeFlag), flagX, y + 6, flagW, flagH);
-    drawFlag(ctx, images.get(match.awayFlag), flagX, y + 35, flagW, flagH);
+    drawFlag(ctx, images.get(normalizeFlagSrc(match.homeFlag)), flagX, y + 6, flagW, flagH);
+    drawFlag(ctx, images.get(normalizeFlagSrc(match.awayFlag)), flagX, y + 35, flagW, flagH);
     drawText(ctx, match.homeScore, scoreX, y + 25, "900 22px Arial", "#fbbf24");
     drawText(ctx, match.awayScore, scoreX, y + 54, "900 22px Arial", "#fbbf24");
   }
@@ -171,8 +199,8 @@
     const scoreX = x + width - 20;
     const row1 = y + 62;
     const row2 = y + 94;
-    drawFlag(ctx, images.get(match.homeFlag), x + 20, row1 - 20, flagW, flagH);
-    drawFlag(ctx, images.get(match.awayFlag), x + 20, row2 - 20, flagW, flagH);
+    drawFlag(ctx, images.get(normalizeFlagSrc(match.homeFlag)), x + 20, row1 - 20, flagW, flagH);
+    drawFlag(ctx, images.get(normalizeFlagSrc(match.awayFlag)), x + 20, row2 - 20, flagW, flagH);
     drawText(ctx, trimText(ctx, match.homeName, 98), nameX, row1, "800 18px Arial", "#f8fafc");
     drawText(ctx, trimText(ctx, match.awayName, 98), nameX, row2, "800 18px Arial", "#f8fafc");
     drawText(ctx, match.homeScore, scoreX, row1, "900 22px Arial", "#fbbf24", "right");
@@ -247,31 +275,34 @@
     gradient.addColorStop(1, "rgba(47, 37, 19, 0.98)");
     fillRound(ctx, x, y, width, height, 34, gradient, "rgba(251, 191, 36, 0.46)");
     fillRound(ctx, x + 30, y + 28, 170, 46, 23, "rgba(251,191,36,0.16)", "rgba(251,191,36,0.35)");
-    drawText(ctx, "CAMPEÓN", x + 115, y + 59, "900 21px Arial", "#fbbf24", "center");
+    drawText(ctx, "CAMPEON", x + 115, y + 59, "900 21px Arial", "#fbbf24", "center");
     drawText(ctx, "🏆", x + width / 2, y + 86, "700 52px Arial", "#fbbf24", "center");
     fillRound(ctx, x + 160, y + 108, width - 320, 92, 46, "rgba(2,12,27,0.74)", "rgba(255,255,255,0.14)");
     drawFlag(ctx, championImage, x + 194, y + 126, 92, 62);
     drawText(ctx, trimText(ctx, championName, 410), x + width / 2 + 58, y + 168, "900 48px Arial", "#fff7d6", "center");
-    drawText(ctx, "Mi predicción al campeón del Mundial 2026", x + width / 2, y + 232, "600 22px Arial", "#cbd5e1", "center");
+    drawText(ctx, "Mi prediccion al campeon del Mundial 2026", x + width / 2, y + 232, "600 22px Arial", "#cbd5e1", "center");
   }
 
-  async function drawMobileShare(callback, type, quality) {
-    const data = getShareData();
-    const championFlag = getChampionFlagSrc();
+  async function drawMobileShare(canvas, callback, type, quality) {
+    const payload = readSharePayload(canvas);
+    const data = getShareData(payload);
+    const championFlag = getChampionFlagSrc(payload);
     const entries = await Promise.all(collectSources(data, championFlag).map(async (src) => [src, await loadImage(src)]));
     const images = new Map(entries.filter((entry) => entry[1]));
-    const championName = getChampionName();
-    const canvas = document.createElement("canvas");
-    canvas.width = SHARE_WIDTH;
-    canvas.height = SHARE_HEIGHT;
-    const ctx = canvas.getContext("2d");
+    const championName = getChampionName(payload);
+    const outputCanvas = document.createElement("canvas");
+    outputCanvas.width = SHARE_WIDTH;
+    outputCanvas.height = SHARE_HEIGHT;
+    const ctx = outputCanvas.getContext("2d");
     if (!ctx) return callback(null);
+
     const bg = ctx.createLinearGradient(0, 0, 0, SHARE_HEIGHT);
     bg.addColorStop(0, "#06111e");
     bg.addColorStop(0.55, "#081d31");
     bg.addColorStop(1, "#07111d");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, SHARE_WIDTH, SHARE_HEIGHT);
+
     ctx.save();
     ctx.globalAlpha = 0.2;
     ctx.fillStyle = "#38bdf8";
@@ -283,12 +314,13 @@
     ctx.arc(1010, 205, 245, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
     drawText(ctx, "Mi bracket del Mundial 2026", 64, 86, "900 44px Arial", "#f8fafc");
-    drawText(ctx, "Mi simulación", 64, 122, "700 24px Arial", "#a8bbd2");
+    drawText(ctx, "Mi simulacion", 64, 122, "700 24px Arial", "#a8bbd2");
     fillRound(ctx, 720, 46, 290, 74, 22, "rgba(251,191,36,0.13)", "rgba(251,191,36,0.34)");
-    drawText(ctx, "CAMPEÓN", 748, 78, "900 18px Arial", "#fbbf24");
+    drawText(ctx, "CAMPEON", 748, 78, "900 18px Arial", "#fbbf24");
     drawText(ctx, trimText(ctx, championName, 220), 748, 106, "900 29px Arial", "#ffffff");
-    drawChampion(ctx, championName, images.get(championFlag));
+    drawChampion(ctx, championName, images.get(normalizeFlagSrc(championFlag)));
     drawText(ctx, "Bracket completo", 70, 482, "900 30px Arial", "#f8fafc");
     drawText(ctx, "Cruces conectados por equipo ganador", 70, 516, "700 20px Arial", "#9fb4cc");
     fillRound(ctx, 16, 536, 1048, 624, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
@@ -298,21 +330,22 @@
     const final = data.finalCards.find((card) => /final/i.test(card.label)) || data.finalCards[1];
     if (third) drawCenterMatch(ctx, third, images, 428, 642, "3er puesto", "#64748b");
     fillRound(ctx, 456, 780, 168, 132, 24, "rgba(8, 47, 73, 0.94)", "rgba(251, 191, 36, 0.46)");
-    drawText(ctx, "CAMPEÓN", 540, 808, "900 15px Arial", "#fbbf24", "center");
-    drawFlag(ctx, images.get(championFlag), 506, 820, 68, 46);
+    drawText(ctx, "CAMPEON", 540, 808, "900 15px Arial", "#fbbf24", "center");
+    drawFlag(ctx, images.get(normalizeFlagSrc(championFlag)), 506, 820, 68, 46);
     drawText(ctx, trimText(ctx, championName, 150), 540, 898, "900 22px Arial", "#ffffff", "center");
     if (final) drawCenterMatch(ctx, final, images, 428, 936, "Final", "#fbbf24");
     fillRound(ctx, 70, 1216, 940, 72, 24, "rgba(255,255,255,0.05)", "rgba(255,255,255,0.12)");
-    drawText(ctx, "Haz tu predicción en", SHARE_WIDTH / 2, 1246, "700 20px Arial", "#9fb4cc", "center");
+    drawText(ctx, "Haz tu prediccion en", SHARE_WIDTH / 2, 1246, "700 20px Arial", "#9fb4cc", "center");
     drawText(ctx, window.location.host || "simulador-mundial-26.vercel.app", SHARE_WIDTH / 2, 1275, "900 24px Arial", "#f8fafc", "center");
-    previousToBlob.call(canvas, callback, type || "image/png", quality || 0.95);
+
+    previousToBlob.call(outputCanvas, callback, type || "image/png", quality || 0.95);
   }
 
   HTMLCanvasElement.prototype.toBlob = function mobileShareToBlob(callback, type, quality) {
     const isShareCanvas = this.width === 1800 && this.height === 1080;
     const isMobile = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches;
     if (isMobile && isShareCanvas) {
-      void drawMobileShare(callback, type, quality);
+      void drawMobileShare(this, callback, type, quality);
       return;
     }
     previousToBlob.call(this, callback, type, quality);

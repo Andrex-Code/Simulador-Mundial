@@ -95,6 +95,14 @@ type ShareRound = {
   matches: ShareMatchCard[];
 };
 
+type ShareImagePayload = {
+  championName?: string;
+  championFlag?: string;
+  predictionName: string;
+  shareUrl: string;
+  rounds: ShareRound[];
+};
+
 type StatPoint = {
   day?: string;
   hour?: string;
@@ -503,8 +511,10 @@ function App() {
     const shareUrl = `${window.location.origin}${window.location.pathname}#prediccion=${encoded}`;
     setShareBusy(true);
     try {
+      const championFlag = champion ? flagCodes[champion.id] : undefined;
       const blob = await renderShareImage({
         champion,
+        championFlag,
         predictionName: "Mi simulacion",
         shareUrl,
         rounds: shareRounds,
@@ -582,6 +592,11 @@ function App() {
   async function loadPublicPredictions() {
     setPeopleOpen(true);
     setPredictionsBusy(true);
+    if (selectedPredictionPreview) {
+      URL.revokeObjectURL(selectedPredictionPreview);
+      setSelectedPredictionPreview(undefined);
+    }
+    setSelectedPredictionId(undefined);
     try {
       const response = await fetch("/api/predictions");
       const body = await response.json().catch(() => ({ predictions: [] }));
@@ -589,6 +604,19 @@ function App() {
     } finally {
       setPredictionsBusy(false);
     }
+  }
+
+  function togglePublicPredictions() {
+    if (peopleOpen) {
+      setPeopleOpen(false);
+      if (selectedPredictionPreview) {
+        URL.revokeObjectURL(selectedPredictionPreview);
+        setSelectedPredictionPreview(undefined);
+      }
+      setSelectedPredictionId(undefined);
+      return;
+    }
+    void loadPublicPredictions();
   }
 
   async function selectPublicPrediction(prediction: PublicPrediction) {
@@ -600,6 +628,7 @@ function App() {
       const data = getShareDataFromResults(prediction.results);
       const blob = await renderShareImage({
         champion: data.champion,
+        championFlag: data.champion ? flagCodes[data.champion.id] : undefined,
         predictionName: prediction.name,
         shareUrl: `${window.location.origin}${window.location.pathname}`,
         rounds: data.rounds,
@@ -657,7 +686,7 @@ function App() {
             <Save size={16} /> Guardar prediccion
           </button>
         ) : null}
-        <button onClick={loadPublicPredictions} className="tool-action people-action">
+        <button onClick={togglePublicPredictions} className="tool-action people-action">
           <Users size={16} /> Predicciones de la gente
         </button>
         <button onClick={reset} className="danger">
@@ -1828,8 +1857,10 @@ async function renderShareImage({
   predictionName,
   shareUrl,
   rounds,
+  championFlag,
 }: {
   champion?: Team;
+  championFlag?: string;
   predictionName: string;
   shareUrl: string;
   rounds: ShareRound[];
@@ -1838,6 +1869,14 @@ async function renderShareImage({
   const canvas = document.createElement("canvas");
   canvas.width = 1800;
   canvas.height = 1080;
+  const payload: ShareImagePayload = {
+    championName: champion?.name,
+    championFlag,
+    predictionName,
+    shareUrl,
+    rounds,
+  };
+  canvas.dataset.sharePayload = JSON.stringify(payload);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("No se pudo generar la imagen");
 

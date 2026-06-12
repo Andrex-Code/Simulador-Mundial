@@ -4,10 +4,90 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simulador Mundial 2026</title>
-    <script type="module" crossorigin src="/assets/index-DoSR1EOt.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CrveLRTN.css">
+    <style>
+      @media (max-width: 720px) {
+        .bracket-side.left {
+          order: 1;
+        }
+
+        .final-lane {
+          order: 2;
+        }
+
+        .bracket-side.right {
+          order: 3;
+        }
+
+        .bracket-side.left .bracket-round:nth-child(2) h3::after,
+        .bracket-side.left .bracket-round:nth-child(3) h3::after,
+        .bracket-side.left .bracket-round:nth-child(4) h3::after {
+          content: " Lado A";
+        }
+
+        .bracket-side.right .bracket-round:nth-child(1) h3::after,
+        .bracket-side.right .bracket-round:nth-child(2) h3::after,
+        .bracket-side.right .bracket-round:nth-child(3) h3::after {
+          content: " Lado B";
+        }
+      }
+
+      .champion-mark {
+        isolation: isolate;
+      }
+
+      .champion-mark::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background:
+          radial-gradient(circle at 50% 30%, rgba(251, 191, 36, 0.16), transparent 34%),
+          linear-gradient(180deg, rgba(3, 10, 20, 0.12), rgba(3, 10, 20, 0.74));
+        pointer-events: none;
+      }
+
+      .champion-mark > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .champion-mark strong {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        padding: 10px 16px;
+        border-radius: 999px;
+        color: #fff7d6;
+        background: rgba(2, 12, 27, 0.66);
+        border: 1px solid rgba(251, 191, 36, 0.28);
+        box-shadow:
+          0 10px 28px rgba(0, 0, 0, 0.28),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(8px);
+      }
+
+      .champion-mark strong .team-label {
+        justify-content: center;
+      }
+
+      .champion-mark strong .team-label > span:last-child {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: initial;
+      }
+
+      .champion-mark .confetti {
+        opacity: 0.24;
+        filter: blur(0.2px);
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-fqJNNVFv.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BohmBFIC.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script src="/mobile-share.js"></script>
+    <script src="/social-share-copy.js"></script>
   </body>
 </html>
