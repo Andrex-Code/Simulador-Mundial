@@ -8,6 +8,7 @@ import {
   LogOut,
   MapPin,
   RotateCcw,
+  Save,
   Share2,
   Shuffle,
   Sparkles,
@@ -133,11 +134,20 @@ type AdminStats = {
   recent?: RecentVisit[];
 };
 
+type PublicPrediction = {
+  id: string;
+  name: string;
+  champion: string;
+  createdAt: string;
+  results: Record<string, MatchResult>;
+};
+
 const savedPredictions: Array<{ id: string; name: string; createdAt: string; champion?: string }> = [];
 const onLoadPrediction = (_entry: unknown) => {};
 const onDeletePrediction = (_id: string) => {};
 
 const ACTIVE_STORAGE_KEY = "worldcup-2026-simulator";
+const SAVED_PUBLIC_SIGNATURES_KEY = "worldcup-2026-public-saves";
 
 const hostByGroup: Record<GroupId, { label: string; tone: string }> = {
   A: { label: "México", tone: "mexico" },
@@ -399,6 +409,15 @@ function App() {
   });
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string>();
   const [shareBusy, setShareBusy] = useState(false);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [publicName, setPublicName] = useState("");
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [publicPredictions, setPublicPredictions] = useState<PublicPrediction[]>([]);
+  const [predictionsBusy, setPredictionsBusy] = useState(false);
+  const [selectedPredictionId, setSelectedPredictionId] = useState<string>();
+  const [selectedPredictionPreview, setSelectedPredictionPreview] = useState<string>();
 
   const standingsByGroup = useMemo(() => calculateAllStandings(results), [results]);
   const thirdRanking = useMemo(() => rankThirds(standingsByGroup), [standingsByGroup]);
@@ -411,6 +430,22 @@ function App() {
 
   const completedGroupMatches = groupMatches.filter((match) => isComplete(results[match.id])).length;
   const champion = knockoutResolved.find((match) => match.id === 104)?.winner;
+  const currentSignature = champion ? createPredictionSignature(results) : undefined;
+
+  useEffect(() => {
+    if (!champion || !currentSignature) return;
+    const savedSignatures = readStorage<string[]>(SAVED_PUBLIC_SIGNATURES_KEY, []);
+    if (!savedSignatures.includes(currentSignature)) {
+      setSaveMessage("");
+      setSavePromptOpen(true);
+    }
+  }, [champion?.id, currentSignature]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedPredictionPreview) URL.revokeObjectURL(selectedPredictionPreview);
+    };
+  }, [selectedPredictionPreview]);
 
   function persistResults(next: Record<string, MatchResult>) {
     setResults(next);
@@ -506,6 +541,75 @@ function App() {
     window.open(facebookUrl, "_blank", "noopener,noreferrer,width=760,height=720");
   }
 
+  async function savePublicPrediction(event: React.FormEvent) {
+    event.preventDefault();
+    if (!champion || !currentSignature) return;
+    const name = publicName.trim();
+    if (!name) {
+      setSaveMessage("Escribe tu nombre para guardar la prediccion.");
+      return;
+    }
+
+    setSaveBusy(true);
+    setSaveMessage("");
+    try {
+      const response = await fetch("/api/predictions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, champion: champion.name, results }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "No se pudo guardar");
+
+      markPredictionSaved(currentSignature);
+      setPublicName("");
+      setSavePromptOpen(false);
+      setPublicPredictions((items) => [body.prediction, ...items.filter((item) => item.id !== body.prediction.id)]);
+      setPeopleOpen(true);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "No se pudo guardar");
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+
+  function dismissSavePrompt() {
+    if (currentSignature) markPredictionSaved(currentSignature);
+    setSavePromptOpen(false);
+    setSaveMessage("");
+  }
+
+  async function loadPublicPredictions() {
+    setPeopleOpen(true);
+    setPredictionsBusy(true);
+    try {
+      const response = await fetch("/api/predictions");
+      const body = await response.json().catch(() => ({ predictions: [] }));
+      setPublicPredictions(Array.isArray(body.predictions) ? body.predictions : []);
+    } finally {
+      setPredictionsBusy(false);
+    }
+  }
+
+  async function selectPublicPrediction(prediction: PublicPrediction) {
+    setSelectedPredictionId(prediction.id);
+    setPredictionsBusy(true);
+    try {
+      if (selectedPredictionPreview) URL.revokeObjectURL(selectedPredictionPreview);
+      setSelectedPredictionPreview(undefined);
+      const data = getShareDataFromResults(prediction.results);
+      const blob = await renderShareImage({
+        champion: data.champion,
+        predictionName: prediction.name,
+        shareUrl: `${window.location.origin}${window.location.pathname}`,
+        rounds: data.rounds,
+      });
+      setSelectedPredictionPreview(URL.createObjectURL(blob));
+    } finally {
+      setPredictionsBusy(false);
+    }
+  }
+
   return (
     <div className="app">
       <header className="hero">
@@ -545,12 +649,34 @@ function App() {
         <button onClick={shareOnFacebook} className="tool-action facebook-action">
           <Share2 size={16} /> Compartir
         </button>
+        {champion ? (
+          <button onClick={() => {
+            setSaveMessage("");
+            setSavePromptOpen(true);
+          }} className="tool-action save-action">
+            <Save size={16} /> Guardar prediccion
+          </button>
+        ) : null}
+        <button onClick={loadPublicPredictions} className="tool-action people-action">
+          <Users size={16} /> Predicciones de la gente
+        </button>
         <button onClick={reset} className="danger">
           <RotateCcw size={16} /> Reiniciar
         </button>
       </nav>
 
       <main className="page-flow">
+        {savePromptOpen && champion ? (
+          <SavePredictionDialog
+            champion={champion}
+            name={publicName}
+            busy={saveBusy}
+            message={saveMessage}
+            onNameChange={setPublicName}
+            onSubmit={savePublicPrediction}
+            onClose={dismissSavePrompt}
+          />
+        ) : null}
         {sharePreviewUrl ? (
           <SharePanel
             champion={champion}
@@ -560,6 +686,22 @@ function App() {
             onClose={() => {
               URL.revokeObjectURL(sharePreviewUrl);
               setSharePreviewUrl(undefined);
+            }}
+          />
+        ) : null}
+        {peopleOpen ? (
+          <PeoplePredictions
+            predictions={publicPredictions}
+            busy={predictionsBusy}
+            selectedId={selectedPredictionId}
+            previewUrl={selectedPredictionPreview}
+            onRefresh={loadPublicPredictions}
+            onSelect={selectPublicPrediction}
+            onClose={() => {
+              if (selectedPredictionPreview) URL.revokeObjectURL(selectedPredictionPreview);
+              setSelectedPredictionPreview(undefined);
+              setSelectedPredictionId(undefined);
+              setPeopleOpen(false);
             }}
           />
         ) : null}
@@ -591,6 +733,112 @@ function App() {
         />
       </main>
     </div>
+  );
+}
+
+function SavePredictionDialog({
+  champion,
+  name,
+  busy,
+  message,
+  onNameChange,
+  onSubmit,
+  onClose,
+}: {
+  champion: Team;
+  name: string;
+  busy: boolean;
+  message: string;
+  onNameChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="prediction-modal" role="dialog" aria-modal="true" aria-labelledby="save-prediction-title">
+      <form className="prediction-dialog" onSubmit={onSubmit}>
+        <Save size={30} />
+        <span>Campeon definido</span>
+        <h2 id="save-prediction-title">Deseas guardar tu prediccion?</h2>
+        <p>
+          Tu campeon es <strong>{champion.name}</strong>. Para guardarla solo necesitamos tu nombre.
+        </p>
+        <input
+          value={name}
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder="Tu nombre"
+          maxLength={60}
+          autoFocus
+        />
+        {message ? <em>{message}</em> : null}
+        <div className="prediction-dialog-actions">
+          <button type="button" onClick={onClose}>Ahora no</button>
+          <button type="submit" disabled={busy}>{busy ? "Guardando..." : "Guardar"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PeoplePredictions({
+  predictions,
+  busy,
+  selectedId,
+  previewUrl,
+  onRefresh,
+  onSelect,
+  onClose,
+}: {
+  predictions: PublicPrediction[];
+  busy: boolean;
+  selectedId?: string;
+  previewUrl?: string;
+  onRefresh: () => void;
+  onSelect: (prediction: PublicPrediction) => void;
+  onClose: () => void;
+}) {
+  const selected = predictions.find((prediction) => prediction.id === selectedId);
+  return (
+    <section className="people-panel">
+      <div className="people-head">
+        <div>
+          <span>Comunidad</span>
+          <h2>Predicciones de la gente</h2>
+        </div>
+        <div className="people-actions">
+          <button type="button" onClick={onRefresh} disabled={busy}>
+            <Users size={16} /> Actualizar
+          </button>
+          <button type="button" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+
+      {predictions.length === 0 ? (
+        <p className="people-empty">{busy ? "Cargando predicciones..." : "Todavia no hay predicciones guardadas."}</p>
+      ) : (
+        <div className="people-list">
+          {predictions.map((prediction) => (
+            <button
+              key={prediction.id}
+              type="button"
+              className={prediction.id === selectedId ? "selected" : ""}
+              onClick={() => onSelect(prediction)}
+            >
+              <strong>{prediction.name}</strong>
+              <span>Campeon: {prediction.champion}</span>
+              <small>{new Date(prediction.createdAt).toLocaleString("es-CO")}</small>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selected ? (
+        <div className="people-preview">
+          <h3>{selected.name}</h3>
+          {busy && !previewUrl ? <p>Generando bracket...</p> : null}
+          {previewUrl ? <img src={previewUrl} alt={`Bracket de ${selected.name}`} /> : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1441,6 +1689,25 @@ function readStorage<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function createPredictionSignature(results: Record<string, MatchResult>) {
+  return JSON.stringify(results);
+}
+
+function markPredictionSaved(signature: string) {
+  const saved = readStorage<string[]>(SAVED_PUBLIC_SIGNATURES_KEY, []);
+  localStorage.setItem(SAVED_PUBLIC_SIGNATURES_KEY, JSON.stringify([signature, ...saved.filter((item) => item !== signature)].slice(0, 30)));
+}
+
+function getShareDataFromResults(results: Record<string, MatchResult>) {
+  const standings = calculateAllStandings(results);
+  const thirds = assignThirds(rankThirds(standings));
+  const knockout = resolveKnockout(standings, thirds, results);
+  return {
+    champion: knockout.find((match) => match.id === 104)?.winner,
+    rounds: createShareRounds(knockout, results),
+  };
 }
 
 function trackPageView() {
