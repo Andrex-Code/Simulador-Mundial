@@ -1,12 +1,18 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  BarChart3,
   CalendarDays,
+  Clock3,
+  Lock,
+  LogOut,
+  MapPin,
   RotateCcw,
   Share2,
   Shuffle,
   Sparkles,
   Trophy,
+  Users,
 } from "lucide-react";
 import "./styles.css";
 
@@ -86,6 +92,45 @@ type ShareRound = {
   accent: string;
   side?: "left" | "right" | "center";
   matches: ShareMatchCard[];
+};
+
+type StatPoint = {
+  day?: string;
+  hour?: string;
+  views: number;
+  visitors?: number;
+};
+
+type StatEntry = {
+  label: string;
+  value: number;
+};
+
+type RecentVisit = {
+  ts: number;
+  path: string;
+  referrer: string;
+  country: string;
+  region: string;
+  city: string;
+  language?: string;
+  width?: number;
+  height?: number;
+};
+
+type AdminStats = {
+  configured: boolean;
+  generatedAt?: string;
+  totalViews?: number;
+  todayViews?: number;
+  todayVisitors?: number;
+  byDay?: StatPoint[];
+  byHour?: StatPoint[];
+  paths?: StatEntry[];
+  countries?: StatEntry[];
+  cities?: StatEntry[];
+  referrers?: StatEntry[];
+  recent?: RecentVisit[];
 };
 
 const savedPredictions: Array<{ id: string; name: string; createdAt: string; champion?: string }> = [];
@@ -340,7 +385,15 @@ const knockoutTemplate: KnockoutMatch[] = [
   { id: 104, round: "FINAL", home: { kind: "winner", match: 101 }, away: { kind: "winner", match: 102 } },
 ];
 
+function Root() {
+  return window.location.pathname.startsWith("/admin") ? <AdminDashboard /> : <App />;
+}
+
 function App() {
+  useEffect(() => {
+    trackPageView();
+  }, []);
+
   const [results, setResults] = useState<Record<string, MatchResult>>(() => {
     return readSharedPrediction() ?? readStorage<Record<string, MatchResult>>(ACTIVE_STORAGE_KEY, {});
   });
@@ -538,6 +591,206 @@ function App() {
         />
       </main>
     </div>
+  );
+}
+
+function AdminDashboard() {
+  const [password, setPassword] = useState("");
+  const [stats, setStats] = useState<AdminStats>();
+  const [loading, setLoading] = useState(true);
+  const [loginError, setLoginError] = useState("");
+
+  async function loadStats() {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin/stats", { credentials: "include" });
+      if (response.status === 401) {
+        setStats(undefined);
+        return;
+      }
+      setStats(await response.json());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  async function login(event: React.FormEvent) {
+    event.preventDefault();
+    setLoginError("");
+    const response = await fetch("/api/admin/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setLoginError(body.error || "No se pudo iniciar sesion");
+      return;
+    }
+
+    setPassword("");
+    await loadStats();
+  }
+
+  async function logout() {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    setStats(undefined);
+  }
+
+  if (loading) {
+    return (
+      <main className="admin-shell">
+        <section className="admin-login">
+          <BarChart3 size={32} />
+          <h1>Cargando estadisticas</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <main className="admin-shell">
+        <form className="admin-login" onSubmit={login}>
+          <Lock size={34} />
+          <h1>Admin</h1>
+          <p>Acceso privado a las estadisticas del simulador.</p>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Clave de administrador"
+            autoFocus
+          />
+          {loginError ? <span className="admin-error">{loginError}</span> : null}
+          <button type="submit">Entrar</button>
+        </form>
+      </main>
+    );
+  }
+
+  if (!stats.configured) {
+    return (
+      <main className="admin-shell">
+        <section className="admin-login">
+          <BarChart3 size={34} />
+          <h1>Analytics pendiente</h1>
+          <p>Configura Upstash Redis en Vercel para empezar a guardar trafico.</p>
+          <code>UPSTASH_REDIS_REST_URL</code>
+          <code>UPSTASH_REDIS_REST_TOKEN</code>
+          <code>ADMIN_PASSWORD</code>
+          <code>ADMIN_SESSION_SECRET</code>
+          <button type="button" onClick={logout}>Cerrar sesion</button>
+        </section>
+      </main>
+    );
+  }
+
+  const dayMax = Math.max(...(stats.byDay ?? []).map((item) => item.views), 1);
+  const hourMax = Math.max(...(stats.byHour ?? []).map((item) => item.views), 1);
+
+  return (
+    <main className="admin-shell">
+      <header className="admin-topbar">
+        <div>
+          <span>Panel privado</span>
+          <h1>Estadisticas del simulador</h1>
+        </div>
+        <div className="admin-actions">
+          <button type="button" onClick={loadStats}>
+            <BarChart3 size={16} /> Actualizar
+          </button>
+          <button type="button" onClick={logout}>
+            <LogOut size={16} /> Salir
+          </button>
+        </div>
+      </header>
+
+      <section className="admin-kpis">
+        <AdminKpi icon={<BarChart3 size={22} />} label="Visitas totales" value={stats.totalViews ?? 0} />
+        <AdminKpi icon={<CalendarDays size={22} />} label="Visitas hoy" value={stats.todayViews ?? 0} />
+        <AdminKpi icon={<Users size={22} />} label="Visitantes hoy" value={stats.todayVisitors ?? 0} />
+        <AdminKpi icon={<Clock3 size={22} />} label="Ultima lectura" value={formatTime(stats.generatedAt)} />
+      </section>
+
+      <section className="admin-grid">
+        <AdminChart title="Ultimos 14 dias" items={stats.byDay ?? []} max={dayMax} getLabel={(item) => item.day?.slice(5) ?? ""} />
+        <AdminChart title="Ultimas 24 horas" items={stats.byHour ?? []} max={hourMax} getLabel={(item) => item.hour?.slice(11, 16) ?? ""} />
+        <AdminList title="Paises" icon={<MapPin size={18} />} items={stats.countries ?? []} />
+        <AdminList title="Ciudades" icon={<MapPin size={18} />} items={stats.cities ?? []} />
+        <AdminList title="Paginas" icon={<BarChart3 size={18} />} items={stats.paths ?? []} />
+        <AdminList title="Referidos" icon={<Share2 size={18} />} items={stats.referrers ?? []} />
+      </section>
+
+      <section className="admin-table">
+        <h2>Ultimas visitas</h2>
+        {(stats.recent ?? []).map((visit) => (
+          <div className="admin-visit" key={`${visit.ts}-${visit.path}-${visit.city}`}>
+            <span>{formatDateTime(visit.ts)}</span>
+            <strong>{visit.path}</strong>
+            <em>{visit.city}, {visit.country}</em>
+            <small>{visit.referrer}</small>
+          </div>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function AdminKpi({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <article className="admin-kpi">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function AdminChart({
+  title,
+  items,
+  max,
+  getLabel,
+}: {
+  title: string;
+  items: StatPoint[];
+  max: number;
+  getLabel: (item: StatPoint) => string;
+}) {
+  return (
+    <section className="admin-panel wide">
+      <h2>{title}</h2>
+      <div className="admin-bars">
+        {items.map((item) => (
+          <div className="admin-bar" key={item.day ?? item.hour}>
+            <span style={{ height: `${Math.max(8, (item.views / max) * 100)}%` }} />
+            <small>{getLabel(item)}</small>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdminList({ title, icon, items }: { title: string; icon: React.ReactNode; items: StatEntry[] }) {
+  return (
+    <section className="admin-panel">
+      <h2>{icon}{title}</h2>
+      {items.length === 0 ? <p>Sin datos todavia.</p> : null}
+      {items.map((item) => (
+        <div className="admin-rank" key={item.label}>
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -1179,6 +1432,37 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function trackPageView() {
+  fetch("/api/track", {
+    method: "POST",
+    keepalive: true,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      path: window.location.pathname,
+      referrer: document.referrer,
+      language: navigator.language,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }),
+  }).catch(() => {
+    // Analytics must never block the simulator.
+  });
+}
+
+function formatTime(value?: string) {
+  if (!value) return "--";
+  return new Date(value).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateTime(value: number) {
+  return new Date(value).toLocaleString("es-CO", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function downloadJson(filename: string, payload: unknown) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1593,4 +1877,4 @@ function trimCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
   return `${output}...`;
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<Root />);
