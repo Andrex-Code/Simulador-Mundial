@@ -595,6 +595,7 @@ function App() {
 }
 
 function AdminDashboard() {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [stats, setStats] = useState<AdminStats>();
   const [loading, setLoading] = useState(true);
@@ -625,7 +626,7 @@ function AdminDashboard() {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
@@ -634,6 +635,7 @@ function AdminDashboard() {
       return;
     }
 
+    setUsername("");
     setPassword("");
     await loadStats();
   }
@@ -662,11 +664,19 @@ function AdminDashboard() {
           <h1>Admin</h1>
           <p>Acceso privado a las estadisticas del simulador.</p>
           <input
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Usuario"
+            autoComplete="username"
+            autoFocus
+          />
+          <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Clave de administrador"
-            autoFocus
+            autoComplete="current-password"
           />
           {loginError ? <span className="admin-error">{loginError}</span> : null}
           <button type="submit">Entrar</button>
@@ -684,6 +694,7 @@ function AdminDashboard() {
           <p>Configura Upstash Redis en Vercel para empezar a guardar trafico.</p>
           <code>UPSTASH_REDIS_REST_URL</code>
           <code>UPSTASH_REDIS_REST_TOKEN</code>
+          <code>ADMIN_USERNAME</code>
           <code>ADMIN_PASSWORD</code>
           <code>ADMIN_SESSION_SECRET</code>
           <button type="button" onClick={logout}>Cerrar sesion</button>

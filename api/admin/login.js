@@ -6,14 +6,15 @@ module.exports = async function handler(req, res) {
   }
 
   const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
+  const adminUsername = process.env.ADMIN_USERNAME;
+  if (!adminPassword || !adminUsername) {
     return sendJson(res, { error: "Admin no configurado" }, 503);
   }
 
   const body = await readJsonBody(req);
 
-  if (body.password !== adminPassword) {
-    return sendJson(res, { error: "Clave incorrecta" }, 401);
+  if (body.username !== adminUsername || body.password !== adminPassword) {
+    return sendJson(res, { error: "Usuario o clave incorrectos" }, 401);
   }
 
   return sendJson(res, { ok: true }, 200, {
