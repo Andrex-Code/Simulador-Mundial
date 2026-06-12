@@ -64,10 +64,16 @@
     return document.querySelector(".champion-mark strong .flag-img, .hero-card .flag-img")?.getAttribute("src") || "";
   }
 
+  function cleanTeamName(text) {
+    return (text || "Por definir").replace(/\s+/g, " ").trim();
+  }
+
   function parseCard(card) {
     const teams = Array.from(card.querySelectorAll(".ko-team"));
     return {
       label: card.querySelector(".ko-title")?.textContent?.trim() || "",
+      homeName: cleanTeamName(teams[0]?.querySelector("span")?.textContent || ""),
+      awayName: cleanTeamName(teams[1]?.querySelector("span")?.textContent || ""),
       homeFlag: teams[0]?.querySelector("img")?.getAttribute("src") || "",
       awayFlag: teams[1]?.querySelector("img")?.getAttribute("src") || "",
       homeScore: teams[0]?.querySelector("input")?.value || "-",
@@ -136,9 +142,24 @@
   }
 
   function drawCenterMatch(ctx, match, images, x, y, title, accent) {
-    fillRound(ctx, x, y, 150, 76, 15, "rgba(8, 54, 50, 0.92)", "rgba(45, 212, 191, 0.34)");
-    drawText(ctx, title, x + 14, y + 20, "900 14px Arial", "#a8bbd2");
-    drawMiniMatch(ctx, match, images, x + 16, y + 26, 118, 44, accent);
+    const width = 220;
+    const height = 104;
+    fillRound(ctx, x, y, width, height, 18, "rgba(8, 54, 50, 0.94)", "rgba(45, 212, 191, 0.42)");
+    fillRound(ctx, x, y, 7, height, 18, accent);
+    drawText(ctx, title, x + 18, y + 24, "900 15px Arial", "#a8bbd2");
+
+    const flagW = 34;
+    const flagH = 24;
+    const nameX = x + 62;
+    const scoreX = x + width - 20;
+    const row1 = y + 38;
+    const row2 = y + 70;
+    drawFlag(ctx, images.get(match.homeFlag), x + 18, row1 - 18, flagW, flagH);
+    drawFlag(ctx, images.get(match.awayFlag), x + 18, row2 - 18, flagW, flagH);
+    drawText(ctx, trimText(ctx, match.homeName, 96), nameX, row1 + 1, "800 18px Arial", "#f8fafc");
+    drawText(ctx, trimText(ctx, match.awayName, 96), nameX, row2 + 1, "800 18px Arial", "#f8fafc");
+    drawText(ctx, match.homeScore, scoreX, row1 + 1, "900 22px Arial", "#fbbf24", "right");
+    drawText(ctx, match.awayScore, scoreX, row2 + 1, "900 22px Arial", "#fbbf24", "right");
   }
 
   function drawConnector(ctx, fromX, fromY, toX, toY) {
@@ -154,7 +175,7 @@
   }
 
   function roundPosition(count, index, cardHeight) {
-    const top = 596;
+    const top = 594;
     if (count === 8) return top + index * (cardHeight + 8);
     if (count === 4) return top + 34 + index * (cardHeight + 60);
     if (count === 2) return top + 106 + index * (cardHeight + 174);
@@ -164,15 +185,15 @@
   function drawSide(ctx, rounds, images, side) {
     const cardW = 78;
     const cardH = 62;
-    const leftXs = [58, 162, 266, 370];
-    const rightXs = [944, 840, 736, 632];
+    const leftXs = [44, 150, 256, 362];
+    const rightXs = [958, 852, 746, 640];
     const sourceRounds = side === "left" ? rounds : rounds.slice().reverse();
     const xs = side === "left" ? leftXs : rightXs;
     const accents = ["#3b82f6", "#60a5fa", "#818cf8", "#f59e0b"];
 
     sourceRounds.forEach((round, roundIndex) => {
       const x = xs[roundIndex];
-      drawText(ctx, shortLabel(round.label), x + cardW / 2, 578, "900 17px Arial", "#dbeafe", "center");
+      drawText(ctx, shortLabel(round.label), x + cardW / 2, 576, "900 17px Arial", "#dbeafe", "center");
       round.matches.forEach((match, index) => {
         const y = roundPosition(round.matches.length, index, cardH);
         drawMiniMatch(ctx, match, images, x, y, cardW, cardH, accents[roundIndex]);
@@ -253,19 +274,19 @@
 
     drawText(ctx, "Bracket completo", 70, 482, "900 30px Arial", "#f8fafc");
     drawText(ctx, "16vos incluidos · banderas y marcadores compactos", 70, 516, "700 20px Arial", "#9fb4cc");
-    fillRound(ctx, 42, 548, 996, 596, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
+    fillRound(ctx, 24, 544, 1032, 606, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
 
     drawSide(ctx, data.leftRounds, images, "left");
     drawSide(ctx, data.rightRounds, images, "right");
 
     const third = data.finalCards.find((card) => /tercer/i.test(card.label)) || data.finalCards[0];
     const final = data.finalCards.find((card) => /final/i.test(card.label)) || data.finalCards[1];
-    if (third) drawCenterMatch(ctx, third, images, 465, 666, "3er puesto", "#64748b");
+    if (third) drawCenterMatch(ctx, third, images, 430, 652, "3er puesto", "#64748b");
     fillRound(ctx, 454, 782, 172, 110, 24, "rgba(8, 47, 73, 0.94)", "rgba(251, 191, 36, 0.46)");
     drawText(ctx, "CAMPEÓN", 540, 812, "900 15px Arial", "#fbbf24", "center");
     drawFlag(ctx, images.get(championFlag), 502, 824, 76, 52);
     drawText(ctx, trimText(ctx, championName, 148), 540, 883, "900 22px Arial", "#ffffff", "center");
-    if (final) drawCenterMatch(ctx, final, images, 465, 920, "Final", "#fbbf24");
+    if (final) drawCenterMatch(ctx, final, images, 430, 920, "Final", "#fbbf24");
 
     fillRound(ctx, 70, 1216, 940, 72, 24, "rgba(255,255,255,0.05)", "rgba(255,255,255,0.12)");
     drawText(ctx, "Haz tu predicción en", SHARE_WIDTH / 2, 1246, "700 20px Arial", "#9fb4cc", "center");
