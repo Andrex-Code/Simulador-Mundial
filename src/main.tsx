@@ -2,8 +2,6 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   CalendarDays,
-  Download,
-  FileUp,
   RotateCcw,
   Share2,
   Shuffle,
@@ -71,16 +69,29 @@ type KnockoutMatch = {
   away: KnockoutSlot | { kind: "winner"; match: number } | { kind: "loser"; match: number };
 };
 
-type SavedPrediction = {
-  id: string;
-  name: string;
-  createdAt: string;
-  results: Record<string, MatchResult>;
-  champion?: string;
+type ShareMatchCard = {
+  label: string;
+  winner?: boolean;
+  home: string;
+  away: string;
+  homeScore: string;
+  awayScore: string;
+  homeFlag?: string;
+  awayFlag?: string;
 };
 
+type ShareRound = {
+  label: string;
+  accent: string;
+  side?: "left" | "right" | "center";
+  matches: ShareMatchCard[];
+};
+
+const savedPredictions: Array<{ id: string; name: string; createdAt: string; champion?: string }> = [];
+const onLoadPrediction = (_entry: unknown) => {};
+const onDeletePrediction = (_id: string) => {};
+
 const ACTIVE_STORAGE_KEY = "worldcup-2026-simulator";
-const LIBRARY_STORAGE_KEY = "worldcup-2026-predictions";
 
 const hostByGroup: Record<GroupId, { label: string; tone: string }> = {
   A: { label: "México", tone: "mexico" },
@@ -175,6 +186,7 @@ const groups: Record<GroupId, Team[]> = {
 const groupIds = Object.keys(groups) as GroupId[];
 const teams = Object.values(groups).flat();
 const teamById = new Map(teams.map((team) => [team.id, team]));
+const shareFlagImageCache = new Map<string, HTMLImageElement>();
 const fifaStrength: Record<string, { rank: number; points: number }> = {
   arg: { rank: 1, points: 1877 },
   esp: { rank: 2, points: 1875 },
@@ -331,10 +343,8 @@ function App() {
   const [results, setResults] = useState<Record<string, MatchResult>>(() => {
     return readSharedPrediction() ?? readStorage<Record<string, MatchResult>>(ACTIVE_STORAGE_KEY, {});
   });
-  const [predictionName, setPredictionName] = useState("Mi prediccion");
-  const [savedPredictions, setSavedPredictions] = useState<SavedPrediction[]>(() =>
-    readStorage<SavedPrediction[]>(LIBRARY_STORAGE_KEY, []),
-  );
+  const [sharePreviewUrl, setSharePreviewUrl] = useState<string>();
+  const [shareBusy, setShareBusy] = useState(false);
 
   const standingsByGroup = useMemo(() => calculateAllStandings(results), [results]);
   const thirdRanking = useMemo(() => rankThirds(standingsByGroup), [standingsByGroup]);
@@ -343,6 +353,7 @@ function App() {
     () => resolveKnockout(standingsByGroup, thirdAssignments, results),
     [standingsByGroup, thirdAssignments, results],
   );
+  const shareRounds = useMemo(() => createShareRounds(knockoutResolved, results), [knockoutResolved, results]);
 
   const completedGroupMatches = groupMatches.filter((match) => isComplete(results[match.id])).length;
   const champion = knockoutResolved.find((match) => match.id === 104)?.winner;
@@ -392,64 +403,53 @@ function App() {
     persistResults(next);
   }
 
-  function savePrediction() {
-    const cleanName = predictionName.trim() || "Mi prediccion";
-    const entry: SavedPrediction = {
-      id: crypto.randomUUID(),
-      name: cleanName,
-      createdAt: new Date().toISOString(),
-      results,
-      champion: champion?.name,
-    };
-    const next = [entry, ...savedPredictions].slice(0, 20);
-    setSavedPredictions(next);
-    localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(next));
-  }
-
-  function loadPrediction(entry: SavedPrediction) {
-    setPredictionName(entry.name);
-    persistResults(entry.results);
-  }
-
-  function deletePrediction(id: string) {
-    const next = savedPredictions.filter((entry) => entry.id !== id);
-    setSavedPredictions(next);
-    localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(next));
-  }
-
-  function exportPrediction() {
-    const payload = {
-      type: "worldcup-2026-prediction",
-      name: predictionName.trim() || "Mi prediccion",
-      exportedAt: new Date().toISOString(),
-      champion: champion?.name ?? "Sin campeon",
-      results,
-      groupWinners: groupIds.map((id) => standingsByGroup[id][0].team.name),
-      thirds: thirdRanking.slice(0, 8).map((row) => `${row.team.name} (${row.team.group})`),
-    };
-    downloadJson("prediccion-mundial-2026.json", payload);
-  }
-
   async function sharePrediction() {
     const encoded = encodeForHash(results);
     const url = `${window.location.origin}${window.location.pathname}#prediccion=${encoded}`;
     await navigator.clipboard.writeText(url);
   }
 
-  function importPrediction() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json,.json";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      const imported = JSON.parse(text) as { name?: string; results?: Record<string, MatchResult> };
-      if (!imported.results) return;
-      setPredictionName(imported.name ?? file.name.replace(/\.json$/i, ""));
-      persistResults(imported.results);
-    };
-    input.click();
+  async function createSharePreview() {
+    const encoded = encodeForHash(results);
+    const shareUrl = `${window.location.origin}${window.location.pathname}#prediccion=${encoded}`;
+    setShareBusy(true);
+    try {
+      const blob = await renderShareImage({
+        champion,
+        predictionName: "Mi simulacion",
+        shareUrl,
+        rounds: shareRounds,
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
+      setSharePreviewUrl(objectUrl);
+      return { blob, objectUrl, shareUrl };
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function shareOnFacebook() {
+    const { blob, shareUrl } = await createSharePreview();
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(
+      `Mi simulacion del Mundial 2026: ${champion?.name ?? "campeon por definir"}`,
+    )}`;
+
+    if (navigator.share && typeof File !== "undefined") {
+      try {
+        const file = new File([blob], "bracket-mundial-2026.png", { type: "image/png" });
+        await navigator.share({
+          title: "Mi simulacion del Mundial 2026",
+          text: "Comparto mi bracket del Mundial 2026",
+          files: [file],
+        });
+        return;
+      } catch {
+        // Fallback to Facebook web share below.
+      }
+    }
+
+    window.open(facebookUrl, "_blank", "noopener,noreferrer,width=760,height=720");
   }
 
   return (
@@ -479,16 +479,6 @@ function App() {
       </header>
 
       <nav className="toolbar" aria-label="Acciones del simulador">
-        <div className="name-field">
-          <input
-            aria-label="Nombre de la prediccion"
-            value={predictionName}
-            onChange={(event) => setPredictionName(event.target.value)}
-          />
-        </div>
-        <button onClick={savePrediction} className="tool-action">
-          <Trophy size={16} /> Guardar
-        </button>
         <button onClick={randomizeGroups} className="tool-action">
           <Shuffle size={16} /> Simular grupos
         </button>
@@ -498,11 +488,8 @@ function App() {
         <button onClick={sharePrediction} className="tool-action">
           <Share2 size={16} /> Copiar enlace
         </button>
-        <button onClick={importPrediction} className="tool-action">
-          <FileUp size={16} /> Importar
-        </button>
-        <button onClick={exportPrediction} className="tool-action">
-          <Download size={16} /> Exportar
+        <button onClick={shareOnFacebook} className="tool-action facebook-action">
+          <Share2 size={16} /> Compartir
         </button>
         <button onClick={reset} className="danger">
           <RotateCcw size={16} /> Reiniciar
@@ -510,6 +497,18 @@ function App() {
       </nav>
 
       <main className="page-flow">
+        {sharePreviewUrl ? (
+          <SharePanel
+            champion={champion}
+            previewUrl={sharePreviewUrl}
+            busy={shareBusy}
+            onRefresh={createSharePreview}
+            onClose={() => {
+              URL.revokeObjectURL(sharePreviewUrl);
+              setSharePreviewUrl(undefined);
+            }}
+          />
+        ) : null}
         <section className="section-block">
           <SectionHeader title="Fase de grupos" kicker="12 grupos · 48 selecciones · 72 partidos" />
           <div className="groups-grid">
@@ -535,9 +534,6 @@ function App() {
           knockout={knockoutResolved}
           champion={champion}
           groupProgress={completedGroupMatches}
-          savedPredictions={savedPredictions}
-          onLoadPrediction={loadPrediction}
-          onDeletePrediction={deletePrediction}
         />
       </main>
     </div>
@@ -555,15 +551,55 @@ function SectionHeader({ title, kicker }: { title: string; kicker: string }) {
   );
 }
 
+function SharePanel({
+  champion,
+  previewUrl,
+  busy,
+  onRefresh,
+  onClose,
+}: {
+  champion?: Team;
+  previewUrl: string;
+  busy: boolean;
+  onRefresh: () => Promise<unknown>;
+  onClose: () => void;
+}) {
+  return (
+    <section className="share-panel">
+      <div className="share-copy">
+        <span>Facebook</span>
+        <h2>Bracket listo para compartir</h2>
+        <p>
+          Generamos una version mas limpia del bracket para publicar. Si tu telefono soporta compartir archivos,
+          se adjunta la imagen directamente; si no, se abre Facebook con el enlace de la simulacion.
+        </p>
+        <strong>{champion ? `Campeon: ${champion.name}` : "Completa la final para coronar un campeon"}</strong>
+      </div>
+      <img className="share-preview" src={previewUrl} alt="Vista previa del bracket para compartir" />
+      <div className="share-actions">
+        <button className="tool-action" onClick={() => void onRefresh()} disabled={busy}>
+          {busy ? "Generando..." : "Actualizar imagen"}
+        </button>
+        <a className="tool-action" href={previewUrl} download="bracket-mundial-2026.png">
+          Descargar PNG
+        </a>
+        <button className="danger" onClick={onClose}>Cerrar</button>
+      </div>
+    </section>
+  );
+}
+
 function Flag({ team }: { team: Team }) {
   const code = flagCodes[team.id];
   if (!code) return <span className="flag-fallback">{team.flag}</span>;
   return (
     <img
       className="flag-img"
-      src={`https://flagcdn.com/${code}.svg`}
+      src={`https://flagcdn.com/w80/${code}.png`}
+      srcSet={`https://flagcdn.com/w40/${code}.png 1x, https://flagcdn.com/w80/${code}.png 2x`}
       alt={`Bandera de ${team.name}`}
       loading="lazy"
+      crossOrigin="anonymous"
     />
   );
 }
@@ -635,6 +671,7 @@ function GroupCard({
             <div className="match-row" key={match.id}>
               <TeamLabel team={home} />
               <ScoreInput value={result.home} onChange={(homeScore) => onResult(match.id, { home: homeScore })} label={`${home.name} goles`} />
+              <span className="match-separator" aria-hidden="true">-</span>
               <ScoreInput value={result.away} onChange={(awayScore) => onResult(match.id, { away: awayScore })} label={`${away.name} goles`} />
               <TeamLabel team={away} />
             </div>
@@ -681,7 +718,7 @@ function KnockoutView({
   onResult: (id: string, patch: MatchResult) => void;
 }) {
   const leftRounds = [
-    { label: "Dieciseisavos", ids: [73, 74, 75, 76, 77, 78, 79, 80] },
+    { label: "16vos Lado A", ids: [73, 74, 75, 76, 77, 78, 79, 80] },
     { label: "Octavos", ids: [89, 90, 91, 92] },
     { label: "Cuartos", ids: [97, 99] },
     { label: "Semifinal", ids: [101] },
@@ -690,7 +727,7 @@ function KnockoutView({
     { label: "Semifinal", ids: [102] },
     { label: "Cuartos", ids: [98, 100] },
     { label: "Octavos", ids: [93, 94, 95, 96] },
-    { label: "Dieciseisavos", ids: [81, 82, 83, 84, 85, 86, 87, 88] },
+    { label: "16vos Lado B", ids: [81, 82, 83, 84, 85, 86, 87, 88] },
   ];
   const final = matches.find((match) => match.id === 104)!;
   const third = matches.find((match) => match.id === 103)!;
@@ -710,7 +747,13 @@ function KnockoutView({
         </div>
         <div className="final-lane">
           <KnockoutMatchCard match={third} result={results[`K-${third.id}`] ?? {}} onResult={onResult} featuredLabel="Tercer puesto" />
-          <div className="champion-mark">
+          <div className={`champion-mark ${final.winner ? "celebrating" : ""}`}>
+            {final.winner ? (
+              <>
+                <div className="confetti confetti-left" aria-hidden="true" />
+                <div className="confetti confetti-right" aria-hidden="true" />
+              </>
+            ) : null}
             <Trophy size={34} />
             <span>Campeón</span>
             <strong>{final.winner ? <TeamLabel team={final.winner} /> : "Por definir"}</strong>
@@ -773,7 +816,7 @@ function KnockoutMatchCard({
 }) {
   return (
     <article className={`ko-card ${match.winner ? "done" : ""}`}>
-      <div className="ko-title">{featuredLabel ?? `Partido ${match.id}`}</div>
+      {featuredLabel ? <div className="ko-title">{featuredLabel}</div> : null}
       <div className="ko-team">
         <span>{renderTeam(match.homeTeam, match.homeLabel)}</span>
         <ScoreInput value={result.home} onChange={(home) => onResult(`K-${match.id}`, { home })} label="Goles local" />
@@ -800,23 +843,26 @@ function SummaryView({
   knockout,
   champion,
   groupProgress,
-  savedPredictions,
-  onLoadPrediction,
-  onDeletePrediction,
 }: {
   standingsByGroup: Record<GroupId, Standing[]>;
   thirdRanking: Standing[];
   knockout: ReturnType<typeof resolveKnockout>;
   champion?: Team;
   groupProgress: number;
-  savedPredictions: SavedPrediction[];
-  onLoadPrediction: (entry: SavedPrediction) => void;
-  onDeletePrediction: (id: string) => void;
 }) {
   const final = knockout.find((match) => match.id === 104);
   return (
     <main className="summary">
-      <section className="podium">
+      <section className={`podium ${champion ? "is-champion" : ""}`}>
+        {champion ? (
+          <>
+            <div className="confetti confetti-left" aria-hidden="true" />
+            <div className="confetti confetti-right" aria-hidden="true" />
+            <div className="winner-flag-wrap" aria-hidden="true">
+              <Flag team={champion} />
+            </div>
+          </>
+        ) : null}
         <Trophy size={46} />
         <h2>{champion ? <TeamLabel team={champion} /> : "Campeón pendiente"}</h2>
         <p>Final: {final?.homeTeam?.name ?? final?.homeLabel} vs {final?.awayTeam?.name ?? final?.awayLabel}</p>
@@ -834,7 +880,7 @@ function SummaryView({
           ))}
         </div>
       </section>
-      <section className="panel compact">
+      {false ? <section className="panel compact">
         <h2>Predicciones guardadas</h2>
         {savedPredictions.length === 0 ? (
           <p className="muted">Todavia no hay predicciones guardadas en este navegador.</p>
@@ -856,7 +902,7 @@ function SummaryView({
             ))}
           </div>
         )}
-      </section>
+      </section> : null}
     </main>
   );
 }
@@ -1169,6 +1215,353 @@ function readSharedPrediction() {
   } catch {
     return undefined;
   }
+}
+
+function createShareRounds(matches: ReturnType<typeof resolveKnockout>, results: Record<string, MatchResult>) {
+  const definitions = [
+    { label: "Dieciseisavos", accent: "#3b82f6", side: "left" as const, ids: [73, 74, 75, 76, 77, 78, 79, 80] },
+    { label: "Octavos", accent: "#60a5fa", side: "left" as const, ids: [89, 90, 91, 92] },
+    { label: "Cuartos", accent: "#818cf8", side: "left" as const, ids: [97, 99] },
+    { label: "Semifinal", accent: "#f59e0b", side: "left" as const, ids: [101] },
+    { label: "Semifinal", accent: "#f59e0b", side: "right" as const, ids: [102] },
+    { label: "Cuartos", accent: "#818cf8", side: "right" as const, ids: [98, 100] },
+    { label: "Octavos", accent: "#60a5fa", side: "right" as const, ids: [93, 94, 95, 96] },
+    { label: "Dieciseisavos", accent: "#3b82f6", side: "right" as const, ids: [81, 82, 83, 84, 85, 86, 87, 88] },
+    { label: "Finales", accent: "#f43f5e", side: "center" as const, ids: [103, 104] },
+  ];
+  const byId = new Map(matches.map((match) => [match.id, match]));
+  return definitions.map((round) => ({
+    label: round.label,
+    accent: round.accent,
+    side: round.side,
+    matches: round.ids
+      .map((id) => byId.get(id))
+      .filter((match): match is NonNullable<typeof match> => Boolean(match))
+      .map((match) => {
+        const result = results[`K-${match.id}`];
+        return {
+          label: match.id === 103 ? "Tercer puesto" : match.id === 104 ? "Final" : "",
+          winner: Boolean(match.winner),
+          home: match.homeTeam?.name ?? match.homeLabel,
+          away: match.awayTeam?.name ?? match.awayLabel,
+          homeScore: result?.home?.toString() ?? "-",
+          awayScore: result?.away?.toString() ?? "-",
+          homeFlag: match.homeTeam?.id ? flagCodes[match.homeTeam.id] : undefined,
+          awayFlag: match.awayTeam?.id ? flagCodes[match.awayTeam.id] : undefined,
+        };
+      }),
+  }));
+}
+
+async function renderShareImage({
+  champion,
+  predictionName,
+  shareUrl,
+  rounds,
+}: {
+  champion?: Team;
+  predictionName: string;
+  shareUrl: string;
+  rounds: ShareRound[];
+}) {
+  await preloadShareFlags(rounds, champion);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1800;
+  canvas.height = 1080;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No se pudo generar la imagen");
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "#071018");
+  gradient.addColorStop(0.5, "#0c1b28");
+  gradient.addColorStop(1, "#08131e");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "rgba(56,189,248,0.08)";
+  ctx.beginPath();
+  ctx.arc(180, 120, 220, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(244,63,94,0.08)";
+  ctx.beginPath();
+  ctx.arc(1620, 160, 240, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "900 48px Arial";
+  ctx.fillText("Mi bracket del Mundial 2026", 56, 74);
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "700 24px Arial";
+  ctx.fillText(trimCanvasText(ctx, predictionName.trim() || "Mi prediccion", 520), 56, 108);
+
+  drawRoundedRect(ctx, 1225, 38, 520, 98, 22);
+  ctx.fillStyle = "rgba(251,191,36,0.12)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(251,191,36,0.38)";
+  ctx.stroke();
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "900 21px Arial";
+  ctx.fillText("CAMPEON", 1252, 74);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 36px Arial";
+  ctx.fillText(trimCanvasText(ctx, champion?.name ?? "Por definir", 450), 1252, 114);
+
+  const leftRounds = rounds.filter((round) => round.side === "left");
+  const rightRounds = rounds.filter((round) => round.side === "right");
+  const centerRounds = rounds.filter((round) => round.side === "center");
+
+  const laneTop = 190;
+  const cardWidth = 178;
+  const cardHeight = 76;
+  const leftXs = [56, 278, 500, 722];
+  const rightXs = [1022, 1238, 1454, 1566];
+  const centerX = 836;
+
+  leftRounds.forEach((round, index) => {
+    drawShareRound(ctx, round, leftXs[index], laneTop, cardWidth, cardHeight, "left");
+  });
+  rightRounds.forEach((round, index) => {
+    drawShareRound(ctx, round, rightXs[index], laneTop, cardWidth, cardHeight, "right");
+  });
+
+  const thirdPlace = centerRounds[0]?.matches[0];
+  const finalMatch = centerRounds[0]?.matches[1];
+
+  if (thirdPlace) {
+    drawMatchCard(ctx, thirdPlace, centerX, 312, 220, 84, "#64748b", "center");
+  }
+
+  drawChampionBadge(ctx, champion, centerX + 10, 468, 200, 150);
+
+  if (finalMatch) {
+    drawMatchCard(ctx, finalMatch, centerX, 694, 220, 92, "#fbbf24", "center");
+  }
+
+  drawRoundedRect(ctx, 56, 964, 1688, 72, 20);
+  ctx.fillStyle = "rgba(15,23,42,0.82)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(148,163,184,0.22)";
+  ctx.stroke();
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "700 20px Arial";
+  ctx.fillText(trimCanvasText(ctx, shareUrl, 1580), 84, 1008);
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+  if (!blob) throw new Error("No se pudo exportar la imagen");
+  return blob;
+}
+
+async function preloadShareFlags(rounds: ShareRound[], champion?: Team) {
+  const codes = new Set<string>();
+  rounds.forEach((round) => {
+    round.matches.forEach((match) => {
+      if (match.homeFlag) codes.add(match.homeFlag);
+      if (match.awayFlag) codes.add(match.awayFlag);
+    });
+  });
+  if (champion?.id) {
+    const code = flagCodes[champion.id];
+    if (code) codes.add(code);
+  }
+  await Promise.all(Array.from(codes).map(loadShareFlag));
+}
+
+async function loadShareFlag(code: string) {
+  if (shareFlagImageCache.has(code)) return shareFlagImageCache.get(code)!;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`No se pudo cargar la bandera ${code}`));
+    img.src = `https://flagcdn.com/w80/${code}.png`;
+  });
+  shareFlagImageCache.set(code, image);
+  return image;
+}
+
+function drawMatchCard(
+  ctx: CanvasRenderingContext2D,
+  match: ShareMatchCard,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  accent: string,
+  align: "left" | "right" | "center" = "left",
+) {
+  drawRoundedRect(ctx, x, y, width, height, 16);
+  ctx.fillStyle = match.winner ? "rgba(16, 185, 129, 0.12)" : "rgba(15,23,42,0.9)";
+  ctx.fill();
+  ctx.strokeStyle = match.winner ? "rgba(16, 185, 129, 0.4)" : "rgba(255,255,255,0.12)";
+  ctx.stroke();
+  const accentX = align === "right" ? x + width - 8 : x;
+  drawRoundedRect(ctx, accentX, y, 8, height, 16);
+  ctx.fillStyle = accent;
+  ctx.fill();
+  if (match.label) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "800 14px Arial";
+    ctx.fillText(match.label, x + 18, y + 18);
+  }
+  drawShareFlag(ctx, match.homeFlag, x + 18, y + 22, 28, 20);
+  drawShareFlag(ctx, match.awayFlag, x + 18, y + 46, 28, 20);
+  ctx.fillStyle = "#fbbf24";
+  ctx.textAlign = "right";
+  ctx.font = "900 18px Arial";
+  ctx.fillText(match.homeScore, x + width - 18, y + 39);
+  ctx.fillText(match.awayScore, x + width - 18, y + 63);
+  ctx.textAlign = "left";
+}
+
+function drawShareRound(
+  ctx: CanvasRenderingContext2D,
+  round: ShareRound,
+  x: number,
+  top: number,
+  cardWidth: number,
+  cardHeight: number,
+  side: "left" | "right",
+) {
+  ctx.fillStyle = "#dbeafe";
+  ctx.font = "900 18px Arial";
+  ctx.textAlign = side === "left" ? "left" : "right";
+  ctx.fillText(round.label, side === "left" ? x : x + cardWidth, top - 22);
+  ctx.textAlign = "left";
+
+  const count = round.matches.length;
+  const totalHeight = getBracketColumnHeight(cardHeight, count);
+  const startY = top + (760 - totalHeight) / 2;
+
+  round.matches.forEach((match, index) => {
+    const y = startY + index * (count === 8 ? 88 : count === 4 ? 176 : count === 2 ? 352 : 0);
+    drawMatchCard(ctx, match, x, y, cardWidth, cardHeight, round.accent, side);
+    if (count > 1) {
+      drawBracketConnector(ctx, side, x, y, cardWidth, cardHeight, count);
+    }
+  });
+}
+
+function getBracketColumnHeight(cardHeight: number, count: number) {
+  if (count === 8) return 8 * cardHeight + 7 * 12;
+  if (count === 4) return 4 * cardHeight + 3 * 100;
+  if (count === 2) return 2 * cardHeight + 1 * 276;
+  return cardHeight;
+}
+
+function drawBracketConnector(
+  ctx: CanvasRenderingContext2D,
+  side: "left" | "right",
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  count: number,
+) {
+  const gapX = 44;
+  const midY = y + height / 2;
+  const verticalSpan = count === 8 ? 44 : count === 4 ? 88 : 176;
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.58)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  if (side === "left") {
+    const startX = x + width;
+    const elbowX = startX + gapX * 0.5;
+    ctx.moveTo(startX, midY);
+    ctx.lineTo(elbowX, midY);
+    ctx.lineTo(elbowX, midY + (count === 1 ? 0 : verticalSpan));
+    ctx.lineTo(startX + gapX, midY + (count === 1 ? 0 : verticalSpan));
+  } else {
+    const startX = x;
+    const elbowX = startX - gapX * 0.5;
+    ctx.moveTo(startX, midY);
+    ctx.lineTo(elbowX, midY);
+    ctx.lineTo(elbowX, midY + (count === 1 ? 0 : verticalSpan));
+    ctx.lineTo(startX - gapX, midY + (count === 1 ? 0 : verticalSpan));
+  }
+  ctx.stroke();
+}
+
+function drawChampionBadge(
+  ctx: CanvasRenderingContext2D,
+  champion: Team | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  drawRoundedRect(ctx, x, y, width, height, 24);
+  ctx.fillStyle = "rgba(8, 47, 73, 0.88)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(251, 191, 36, 0.42)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "900 18px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("CAMPEON", x + width / 2, y + 26);
+  if (champion) {
+    drawShareFlag(ctx, flagCodes[champion.id], x + width / 2 - 38, y + 40, 76, 54);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 24px Arial";
+    ctx.fillText(trimCanvasText(ctx, champion.name, width - 24), x + width / 2, y + 122);
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 24px Arial";
+    ctx.fillText("Por definir", x + width / 2, y + 88);
+  }
+  ctx.textAlign = "left";
+}
+
+function drawShareFlag(
+  ctx: CanvasRenderingContext2D,
+  code: string | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (!code) return;
+  const img = shareFlagImageCache.get(code);
+  if (!img) return;
+  ctx.save();
+  ctx.beginPath();
+  const radius = 3;
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(img, x, y, width, height);
+  ctx.restore();
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, safeRadius);
+  ctx.arcTo(x + width, y + height, x, y + height, safeRadius);
+  ctx.arcTo(x, y + height, x, y, safeRadius);
+  ctx.arcTo(x, y, x + width, y, safeRadius);
+  ctx.closePath();
+}
+
+function trimCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let output = text;
+  while (output.length > 3 && ctx.measureText(`${output}...`).width > maxWidth) {
+    output = output.slice(0, -1);
+  }
+  return `${output}...`;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
