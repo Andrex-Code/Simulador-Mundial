@@ -123,27 +123,27 @@
   }
 
   function drawMiniMatch(ctx, match, images, x, y, width, height, accent = "#38bdf8") {
-    fillRound(ctx, x, y, width, height, 12, "rgba(8, 54, 50, 0.9)", "rgba(45, 212, 191, 0.34)");
-    fillRound(ctx, x, y, 5, height, 12, accent);
-    const flagX = x + 10;
+    fillRound(ctx, x, y, width, height, 10, "rgba(8, 54, 50, 0.9)", "rgba(45, 212, 191, 0.34)");
+    fillRound(ctx, x, y, 5, height, 10, accent);
+    const flagX = x + 9;
     const flagW = 34;
-    const flagH = 24;
-    const scoreX = flagX + flagW + 14;
-    drawFlag(ctx, images.get(match.homeFlag), flagX, y + 9, flagW, flagH);
-    drawFlag(ctx, images.get(match.awayFlag), flagX, y + 41, flagW, flagH);
-    drawText(ctx, match.homeScore, scoreX, y + 29, "900 23px Arial", "#fbbf24");
-    drawText(ctx, match.awayScore, scoreX, y + 61, "900 23px Arial", "#fbbf24");
+    const flagH = 23;
+    const scoreX = flagX + flagW + 13;
+    drawFlag(ctx, images.get(match.homeFlag), flagX, y + 6, flagW, flagH);
+    drawFlag(ctx, images.get(match.awayFlag), flagX, y + 35, flagW, flagH);
+    drawText(ctx, match.homeScore, scoreX, y + 25, "900 22px Arial", "#fbbf24");
+    drawText(ctx, match.awayScore, scoreX, y + 54, "900 22px Arial", "#fbbf24");
   }
 
   function drawCenterMatch(ctx, match, images, x, y, title, accent) {
-    fillRound(ctx, x, y, 154, 88, 16, "rgba(8, 54, 50, 0.92)", "rgba(45, 212, 191, 0.34)");
-    drawText(ctx, title, x + 14, y + 22, "900 15px Arial", "#a8bbd2");
-    drawMiniMatch(ctx, match, images, x + 16, y + 30, 122, 48, accent);
+    fillRound(ctx, x, y, 150, 76, 15, "rgba(8, 54, 50, 0.92)", "rgba(45, 212, 191, 0.34)");
+    drawText(ctx, title, x + 14, y + 20, "900 14px Arial", "#a8bbd2");
+    drawMiniMatch(ctx, match, images, x + 16, y + 26, 118, 44, accent);
   }
 
   function drawConnector(ctx, fromX, fromY, toX, toY) {
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.34)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.30)";
+    ctx.lineWidth = 2.6;
     ctx.beginPath();
     const midX = (fromX + toX) / 2;
     ctx.moveTo(fromX, fromY);
@@ -154,25 +154,25 @@
   }
 
   function roundPosition(count, index, cardHeight) {
-    const top = 610;
-    if (count === 8) return top + index * (cardHeight + 9);
-    if (count === 4) return top + 39 + index * (cardHeight + 70);
-    if (count === 2) return top + 112 + index * (cardHeight + 203);
-    return top + 260;
+    const top = 596;
+    if (count === 8) return top + index * (cardHeight + 8);
+    if (count === 4) return top + 34 + index * (cardHeight + 60);
+    if (count === 2) return top + 106 + index * (cardHeight + 174);
+    return top + 246;
   }
 
   function drawSide(ctx, rounds, images, side) {
-    const cardW = 82;
-    const cardH = 74;
-    const leftXs = [58, 166, 274, 382];
-    const rightXs = [940, 832, 724, 616];
+    const cardW = 78;
+    const cardH = 62;
+    const leftXs = [58, 162, 266, 370];
+    const rightXs = [944, 840, 736, 632];
     const sourceRounds = side === "left" ? rounds : rounds.slice().reverse();
     const xs = side === "left" ? leftXs : rightXs;
     const accents = ["#3b82f6", "#60a5fa", "#818cf8", "#f59e0b"];
 
     sourceRounds.forEach((round, roundIndex) => {
       const x = xs[roundIndex];
-      drawText(ctx, shortLabel(round.label), x + cardW / 2, 590, "900 18px Arial", "#dbeafe", "center");
+      drawText(ctx, shortLabel(round.label), x + cardW / 2, 578, "900 17px Arial", "#dbeafe", "center");
       round.matches.forEach((match, index) => {
         const y = roundPosition(round.matches.length, index, cardH);
         drawMiniMatch(ctx, match, images, x, y, cardW, cardH, accents[roundIndex]);
@@ -253,23 +253,23 @@
 
     drawText(ctx, "Bracket completo", 70, 482, "900 30px Arial", "#f8fafc");
     drawText(ctx, "16vos incluidos · banderas y marcadores compactos", 70, 516, "700 20px Arial", "#9fb4cc");
-    fillRound(ctx, 42, 548, 996, 610, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
+    fillRound(ctx, 42, 548, 996, 596, 30, "rgba(7, 18, 31, 0.92)", "rgba(148, 163, 184, 0.22)");
 
     drawSide(ctx, data.leftRounds, images, "left");
     drawSide(ctx, data.rightRounds, images, "right");
 
     const third = data.finalCards.find((card) => /tercer/i.test(card.label)) || data.finalCards[0];
     const final = data.finalCards.find((card) => /final/i.test(card.label)) || data.finalCards[1];
-    if (third) drawCenterMatch(ctx, third, images, 463, 666, "3er puesto", "#64748b");
-    fillRound(ctx, 442, 790, 196, 128, 26, "rgba(8, 47, 73, 0.92)", "rgba(251, 191, 36, 0.46)");
-    drawText(ctx, "CAMPEÓN", 540, 822, "900 17px Arial", "#fbbf24", "center");
-    drawFlag(ctx, images.get(championFlag), 498, 836, 84, 58);
-    drawText(ctx, trimText(ctx, championName, 170), 540, 908, "900 25px Arial", "#ffffff", "center");
-    if (final) drawCenterMatch(ctx, final, images, 463, 960, "Final", "#fbbf24");
+    if (third) drawCenterMatch(ctx, third, images, 465, 666, "3er puesto", "#64748b");
+    fillRound(ctx, 454, 782, 172, 110, 24, "rgba(8, 47, 73, 0.94)", "rgba(251, 191, 36, 0.46)");
+    drawText(ctx, "CAMPEÓN", 540, 812, "900 15px Arial", "#fbbf24", "center");
+    drawFlag(ctx, images.get(championFlag), 502, 824, 76, 52);
+    drawText(ctx, trimText(ctx, championName, 148), 540, 883, "900 22px Arial", "#ffffff", "center");
+    if (final) drawCenterMatch(ctx, final, images, 465, 920, "Final", "#fbbf24");
 
-    fillRound(ctx, 70, 1192, 940, 82, 24, "rgba(255,255,255,0.045)", "rgba(255,255,255,0.12)");
-    drawText(ctx, "Haz tu predicción en", SHARE_WIDTH / 2, 1225, "700 21px Arial", "#9fb4cc", "center");
-    drawText(ctx, window.location.host || "simulador-mundial-26.vercel.app", SHARE_WIDTH / 2, 1257, "900 25px Arial", "#f8fafc", "center");
+    fillRound(ctx, 70, 1216, 940, 72, 24, "rgba(255,255,255,0.05)", "rgba(255,255,255,0.12)");
+    drawText(ctx, "Haz tu predicción en", SHARE_WIDTH / 2, 1246, "700 20px Arial", "#9fb4cc", "center");
+    drawText(ctx, window.location.host || "simulador-mundial-26.vercel.app", SHARE_WIDTH / 2, 1275, "900 24px Arial", "#f8fafc", "center");
     previousToBlob.call(canvas, callback, type || "image/png", quality || 0.95);
   }
 
