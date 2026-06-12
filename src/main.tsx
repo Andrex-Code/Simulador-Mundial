@@ -72,6 +72,7 @@ type KnockoutMatch = {
 type ShareMatchCard = {
   label: string;
   winner?: boolean;
+  winnerSide?: "home" | "away";
   home: string;
   away: string;
   homeScore: string;
@@ -718,16 +719,16 @@ function KnockoutView({
   onResult: (id: string, patch: MatchResult) => void;
 }) {
   const leftRounds = [
-    { label: "16vos Lado A", ids: [73, 74, 75, 76, 77, 78, 79, 80] },
-    { label: "Octavos", ids: [89, 90, 91, 92] },
-    { label: "Cuartos", ids: [97, 99] },
+    { label: "16vos Lado A", ids: [74, 77, 73, 75, 83, 84, 81, 82] },
+    { label: "Octavos", ids: [89, 90, 93, 94] },
+    { label: "Cuartos", ids: [97, 98] },
     { label: "Semifinal", ids: [101] },
   ];
   const rightRounds = [
     { label: "Semifinal", ids: [102] },
-    { label: "Cuartos", ids: [98, 100] },
-    { label: "Octavos", ids: [93, 94, 95, 96] },
-    { label: "16vos Lado B", ids: [81, 82, 83, 84, 85, 86, 87, 88] },
+    { label: "Cuartos", ids: [99, 100] },
+    { label: "Octavos", ids: [91, 92, 95, 96] },
+    { label: "16vos Lado B", ids: [76, 78, 79, 80, 86, 88, 85, 87] },
   ];
   const final = matches.find((match) => match.id === 104)!;
   const third = matches.find((match) => match.id === 103)!;
@@ -1219,14 +1220,14 @@ function readSharedPrediction() {
 
 function createShareRounds(matches: ReturnType<typeof resolveKnockout>, results: Record<string, MatchResult>) {
   const definitions = [
-    { label: "Dieciseisavos", accent: "#3b82f6", side: "left" as const, ids: [73, 74, 75, 76, 77, 78, 79, 80] },
-    { label: "Octavos", accent: "#60a5fa", side: "left" as const, ids: [89, 90, 91, 92] },
-    { label: "Cuartos", accent: "#818cf8", side: "left" as const, ids: [97, 99] },
+    { label: "Dieciseisavos", accent: "#3b82f6", side: "left" as const, ids: [74, 77, 73, 75, 83, 84, 81, 82] },
+    { label: "Octavos", accent: "#60a5fa", side: "left" as const, ids: [89, 90, 93, 94] },
+    { label: "Cuartos", accent: "#818cf8", side: "left" as const, ids: [97, 98] },
     { label: "Semifinal", accent: "#f59e0b", side: "left" as const, ids: [101] },
     { label: "Semifinal", accent: "#f59e0b", side: "right" as const, ids: [102] },
-    { label: "Cuartos", accent: "#818cf8", side: "right" as const, ids: [98, 100] },
-    { label: "Octavos", accent: "#60a5fa", side: "right" as const, ids: [93, 94, 95, 96] },
-    { label: "Dieciseisavos", accent: "#3b82f6", side: "right" as const, ids: [81, 82, 83, 84, 85, 86, 87, 88] },
+    { label: "Cuartos", accent: "#818cf8", side: "right" as const, ids: [99, 100] },
+    { label: "Octavos", accent: "#60a5fa", side: "right" as const, ids: [91, 92, 95, 96] },
+    { label: "Dieciseisavos", accent: "#3b82f6", side: "right" as const, ids: [76, 78, 79, 80, 86, 88, 85, 87] },
     { label: "Finales", accent: "#f43f5e", side: "center" as const, ids: [103, 104] },
   ];
   const byId = new Map(matches.map((match) => [match.id, match]));
@@ -1242,6 +1243,7 @@ function createShareRounds(matches: ReturnType<typeof resolveKnockout>, results:
         return {
           label: match.id === 103 ? "Tercer puesto" : match.id === 104 ? "Final" : "",
           winner: Boolean(match.winner),
+          winnerSide: getWinnerSide(match),
           home: match.homeTeam?.name ?? match.homeLabel,
           away: match.awayTeam?.name ?? match.awayLabel,
           homeScore: result?.home?.toString() ?? "-",
@@ -1251,6 +1253,12 @@ function createShareRounds(matches: ReturnType<typeof resolveKnockout>, results:
         };
       }),
   }));
+}
+
+function getWinnerSide(match: ReturnType<typeof resolveKnockout>[number]): ShareMatchCard["winnerSide"] {
+  if (match.winner?.id === match.homeTeam?.id) return "home";
+  if (match.winner?.id === match.awayTeam?.id) return "away";
+  return undefined;
 }
 
 async function renderShareImage({
@@ -1403,14 +1411,35 @@ function drawMatchCard(
     ctx.font = "800 14px Arial";
     ctx.fillText(match.label, x + 18, y + 18);
   }
-  drawShareFlag(ctx, match.homeFlag, x + 18, y + 22, 28, 20);
-  drawShareFlag(ctx, match.awayFlag, x + 18, y + 46, 28, 20);
+  drawShareTeamRow(ctx, match.home, match.homeFlag, match.winnerSide === "home", x, y + 22, width);
+  drawShareTeamRow(ctx, match.away, match.awayFlag, match.winnerSide === "away", x, y + 46, width);
   ctx.fillStyle = "#fbbf24";
   ctx.textAlign = "right";
   ctx.font = "900 18px Arial";
   ctx.fillText(match.homeScore, x + width - 18, y + 39);
   ctx.fillText(match.awayScore, x + width - 18, y + 63);
   ctx.textAlign = "left";
+}
+
+function drawShareTeamRow(
+  ctx: CanvasRenderingContext2D,
+  teamName: string,
+  flagCode: string | undefined,
+  isWinner: boolean,
+  x: number,
+  y: number,
+  width: number,
+) {
+  if (isWinner) {
+    drawRoundedRect(ctx, x + 12, y - 3, width - 24, 24, 8);
+    ctx.fillStyle = "rgba(34, 197, 94, 0.18)";
+    ctx.fill();
+  }
+  drawShareFlag(ctx, flagCode, x + 18, y, 28, 20);
+  ctx.fillStyle = isWinner ? "#ffffff" : "#cbd5e1";
+  ctx.font = isWinner ? "900 15px Arial" : "700 15px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(trimCanvasText(ctx, teamName, width - 96), x + 54, y + 16);
 }
 
 function drawShareRound(
