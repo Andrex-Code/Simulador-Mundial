@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simulador Mundial 2026</title>
+    <style>
+      @media (max-width: 720px) {
+        .bracket-side.left {
+          order: 1;
+        }
+
+        .final-lane {
+          order: 2;
+        }
+
+        .bracket-side.right {
+          order: 3;
+        }
+
+        .bracket-side.left .bracket-round:nth-child(2) h3::after,
+        .bracket-side.left .bracket-round:nth-child(3) h3::after,
+        .bracket-side.left .bracket-round:nth-child(4) h3::after {
+          content: " Lado A";
+        }
+
+        .bracket-side.right .bracket-round:nth-child(1) h3::after,
+        .bracket-side.right .bracket-round:nth-child(2) h3::after,
+        .bracket-side.right .bracket-round:nth-child(3) h3::after {
+          content: " Lado B";
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
