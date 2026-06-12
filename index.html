@@ -17,7 +17,7 @@
         padding: 16px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 8px;
-        background: rgba(15, 23, 42, 0.92);
+        background: rgba(15, 23, 42, 0.94);
       }
 
       .facebook-share-panel h3 {
@@ -74,7 +74,6 @@
       (() => {
         const STORAGE_KEY = "worldcup-2026-simulator";
         let latestImageUrl = "";
-        let latestImageBlob = null;
 
         function cleanText(value) {
           return String(value || "")
@@ -135,8 +134,7 @@
             const score = row.querySelector("input")?.value || "-";
             return { team, score };
           });
-          const status = cleanText(card.querySelector("small")?.textContent || "Pendiente");
-          return { title, teams, status };
+          return { title, teams };
         }
 
         function readRound(round) {
@@ -147,21 +145,17 @@
         }
 
         function readBracketData() {
-          const leftRounds = Array.from(document.querySelectorAll(".bracket-side.left .bracket-round")).map(readRound);
-          const rightRounds = Array.from(document.querySelectorAll(".bracket-side.right .bracket-round")).map(readRound);
-          const finalCards = Array.from(document.querySelectorAll(".final-lane .ko-card")).map(readMatchCard);
           return {
             predictionName: getPredictionName(),
             champion: getChampionName(),
-            leftRounds,
-            rightRounds,
-            finalCards,
-            url: sharedPredictionUrl(),
+            leftRounds: Array.from(document.querySelectorAll(".bracket-side.left .bracket-round")).map(readRound),
+            rightRounds: Array.from(document.querySelectorAll(".bracket-side.right .bracket-round")).map(readRound),
+            finalCards: Array.from(document.querySelectorAll(".final-lane .ko-card")).map(readMatchCard),
           };
         }
 
         function drawCard(ctx, card, x, y, width, height, accent) {
-          roundRect(ctx, x, y, width, height, 14);
+          roundRect(ctx, x, y, width, height, 13);
           ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
           ctx.fill();
           ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
@@ -173,32 +167,30 @@
           ctx.fill();
 
           ctx.fillStyle = "#94a3b8";
-          ctx.font = "700 15px Inter, Arial, sans-serif";
-          ctx.fillText(cropText(ctx, card.title, width - 24), x + 16, y + 23);
+          ctx.font = "700 13px Inter, Arial, sans-serif";
+          ctx.fillText(cropText(ctx, card.title, width - 24), x + 15, y + 21);
 
-          ctx.font = "800 18px Inter, Arial, sans-serif";
           const first = card.teams[0] || { team: "Por definir", score: "-" };
           const second = card.teams[1] || { team: "Por definir", score: "-" };
-
+          ctx.font = "800 15px Inter, Arial, sans-serif";
           ctx.fillStyle = "#f8fafc";
-          ctx.fillText(cropText(ctx, first.team, width - 56), x + 16, y + 52);
-          ctx.fillText(cropText(ctx, second.team, width - 56), x + 16, y + 82);
-
+          ctx.fillText(cropText(ctx, first.team, width - 50), x + 15, y + 48);
+          ctx.fillText(cropText(ctx, second.team, width - 50), x + 15, y + 73);
           ctx.fillStyle = "#fbbf24";
           ctx.textAlign = "right";
-          ctx.fillText(first.score, x + width - 14, y + 52);
-          ctx.fillText(second.score, x + width - 14, y + 82);
+          ctx.fillText(first.score, x + width - 13, y + 48);
+          ctx.fillText(second.score, x + width - 13, y + 73);
           ctx.textAlign = "left";
         }
 
         function drawRound(ctx, round, x, y, width, height, accent) {
           ctx.fillStyle = "#e2e8f0";
-          ctx.font = "900 22px Inter, Arial, sans-serif";
-          ctx.fillText(round.label, x, y - 16);
+          ctx.font = "900 18px Inter, Arial, sans-serif";
+          ctx.fillText(round.label, x, y - 12);
 
-          const gap = 9;
+          const gap = 7;
           const count = Math.max(1, round.matches.length);
-          const cardHeight = Math.min(96, Math.max(64, (height - gap * (count - 1)) / count));
+          const cardHeight = Math.min(82, Math.max(58, (height - gap * (count - 1)) / count));
           const totalHeight = cardHeight * count + gap * (count - 1);
           let currentY = y + Math.max(0, (height - totalHeight) / 2);
 
@@ -210,8 +202,8 @@
 
         function drawShareImage() {
           const data = readBracketData();
-          const width = 2000;
-          const height = 1125;
+          const width = 1600;
+          const height = 900;
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
@@ -219,112 +211,89 @@
 
           const gradient = ctx.createLinearGradient(0, 0, width, height);
           gradient.addColorStop(0, "#07111f");
-          gradient.addColorStop(0.48, "#102033");
+          gradient.addColorStop(0.5, "#102033");
           gradient.addColorStop(1, "#050816");
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, width, height);
 
           ctx.fillStyle = "rgba(20, 184, 106, 0.18)";
           ctx.beginPath();
-          ctx.arc(170, 115, 280, 0, Math.PI * 2);
+          ctx.arc(130, 90, 230, 0, Math.PI * 2);
           ctx.fill();
           ctx.fillStyle = "rgba(239, 51, 64, 0.14)";
           ctx.beginPath();
-          ctx.arc(width - 160, 110, 290, 0, Math.PI * 2);
+          ctx.arc(width - 120, 90, 230, 0, Math.PI * 2);
           ctx.fill();
 
           ctx.fillStyle = "#f8fafc";
-          ctx.font = "900 58px Inter, Arial, sans-serif";
-          ctx.fillText("Mi predicción del Mundial 2026", 70, 82);
-
+          ctx.font = "900 46px Inter, Arial, sans-serif";
+          ctx.fillText("Mi predicción del Mundial 2026", 45, 66);
           ctx.fillStyle = "#cbd5e1";
-          ctx.font = "700 28px Inter, Arial, sans-serif";
-          ctx.fillText(cropText(ctx, data.predictionName, 650), 70, 126);
+          ctx.font = "700 23px Inter, Arial, sans-serif";
+          ctx.fillText(cropText(ctx, data.predictionName, 520), 45, 104);
 
-          const championX = 770;
-          const championY = 48;
-          const championW = 1160;
-          const championH = 108;
-          roundRect(ctx, championX, championY, championW, championH, 22);
+          roundRect(ctx, 620, 35, 930, 95, 20);
           ctx.fillStyle = "rgba(251, 191, 36, 0.16)";
           ctx.fill();
           ctx.strokeStyle = "rgba(251, 191, 36, 0.55)";
-          ctx.lineWidth = 2;
           ctx.stroke();
           ctx.fillStyle = "#fbbf24";
-          ctx.font = "900 26px Inter, Arial, sans-serif";
-          ctx.fillText("CAMPEÓN", championX + 28, championY + 38);
+          ctx.font = "900 22px Inter, Arial, sans-serif";
+          ctx.fillText("CAMPEÓN", 648, 68);
           ctx.fillStyle = "#ffffff";
-          ctx.font = "900 52px Inter, Arial, sans-serif";
-          ctx.fillText(cropText(ctx, data.champion, championW - 70), championX + 28, championY + 88);
+          ctx.font = "900 43px Inter, Arial, sans-serif";
+          ctx.fillText(cropText(ctx, data.champion, 850), 648, 112);
 
-          const top = 230;
-          const areaHeight = 780;
-          const cardWidth = 185;
-          const leftXs = [55, 278, 501, 724];
-          const rightXs = [1091, 1314, 1537, 1760];
+          const top = 185;
+          const areaHeight = 610;
+          const cardWidth = 148;
+          const leftXs = [35, 213, 391, 569];
+          const rightXs = [881, 1059, 1237, 1415];
           const accents = ["#38bdf8", "#60a5fa", "#a78bfa", "#fbbf24"];
 
           data.leftRounds.forEach((round, index) => drawRound(ctx, round, leftXs[index], top, cardWidth, areaHeight, accents[index] || "#38bdf8"));
           data.rightRounds.forEach((round, index) => drawRound(ctx, round, rightXs[index], top, cardWidth, areaHeight, accents[3 - index] || "#38bdf8"));
 
-          const centerX = 925;
           ctx.fillStyle = "#e2e8f0";
-          ctx.font = "900 24px Inter, Arial, sans-serif";
-          ctx.fillText("Partidos finales", centerX, top - 16);
+          ctx.font = "900 19px Inter, Arial, sans-serif";
+          ctx.fillText("Finales", 742, top - 12);
           data.finalCards.forEach((card, index) => {
-            drawCard(ctx, card, centerX, top + 95 + index * 190, 250, 112, index === 0 ? "#94a3b8" : "#fbbf24");
+            drawCard(ctx, card, 710, top + 85 + index * 158, 180, 96, index === 0 ? "#94a3b8" : "#fbbf24");
           });
 
-          roundRect(ctx, 775, 780, 450, 130, 22);
+          roundRect(ctx, 610, 645, 380, 105, 20);
           ctx.fillStyle = "rgba(21, 181, 111, 0.14)";
           ctx.fill();
           ctx.strokeStyle = "rgba(21, 181, 111, 0.45)";
           ctx.stroke();
           ctx.fillStyle = "#15b56f";
-          ctx.font = "900 24px Inter, Arial, sans-serif";
-          ctx.fillText("GANADOR DE LA SIMULACIÓN", 805, 825);
+          ctx.font = "900 21px Inter, Arial, sans-serif";
+          ctx.fillText("GANADOR DE LA SIMULACIÓN", 637, 682);
           ctx.fillStyle = "#ffffff";
-          ctx.font = "900 44px Inter, Arial, sans-serif";
-          ctx.fillText(cropText(ctx, data.champion, 390), 805, 880);
+          ctx.font = "900 38px Inter, Arial, sans-serif";
+          ctx.fillText(cropText(ctx, data.champion, 325), 637, 728);
 
           ctx.fillStyle = "#94a3b8";
-          ctx.font = "700 20px Inter, Arial, sans-serif";
-          ctx.fillText("Simulado en simulador-mundial-two.vercel.app", 70, 1065);
+          ctx.font = "700 18px Inter, Arial, sans-serif";
+          ctx.fillText("simulador-mundial-two.vercel.app", 45, 855);
           ctx.textAlign = "right";
-          ctx.fillText("Comparte tu bracket y reta a tus amigos", width - 70, 1065);
+          ctx.fillText("Comparte tu bracket y reta a tus amigos", width - 45, 855);
           ctx.textAlign = "left";
-
           return canvas;
-        }
-
-        function canvasToBlob(canvas) {
-          return new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
         }
 
         async function createShareImage() {
           const canvas = drawShareImage();
           if (latestImageUrl) URL.revokeObjectURL(latestImageUrl);
-          latestImageBlob = await canvasToBlob(canvas);
-          latestImageUrl = URL.createObjectURL(latestImageBlob);
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+          latestImageUrl = URL.createObjectURL(blob);
           return latestImageUrl;
         }
 
-        async function openFacebookShare() {
-          if (!latestImageBlob) await createShareImage();
-          const champion = getChampionName().replace(/[^a-z0-9áéíóúñü -]/gi, "").trim() || "campeon";
-          const file = new File([latestImageBlob], `bracket-mundial-2026-${champion}.png`, { type: "image/png" });
-
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: "Mi predicción del Mundial 2026",
-              text: `Mi campeón del Mundial 2026 es ${getChampionName()}`,
-              files: [file],
-            });
-            return;
-          }
-
-          window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(sharedPredictionUrl())}`, "_blank", "noopener,noreferrer");
+        function openFacebookShare() {
+          const text = `Mi campeón del Mundial 2026 es ${getChampionName()}`;
+          const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(sharedPredictionUrl())}&quote=${encodeURIComponent(text)}`;
+          window.open(facebookUrl, "_blank", "noopener,noreferrer,width=700,height=650");
         }
 
         async function showSharePanel() {
@@ -341,12 +310,12 @@
           panel.className = "facebook-share-panel";
           panel.innerHTML = `
             <div>
-              <h3>Imagen lista para compartir</h3>
-              <p>Se generó una imagen PNG del bracket con el campeón visible. En celular se intentará compartir la imagen directamente; en escritorio también puedes descargarla y subirla a Facebook.</p>
+              <h3>Imagen lista para Facebook</h3>
+              <p>Facebook se abrirá directamente con el enlace de tu predicción. Para que también aparezca la imagen del bracket, descarga el PNG y súbelo en la publicación.</p>
             </div>
             <img class="facebook-share-preview" alt="Bracket del Mundial 2026 generado por la simulación" src="${imageUrl}" />
             <div class="facebook-share-actions">
-              <button type="button" class="facebook-primary" data-share-facebook>Compartir en Facebook</button>
+              <button type="button" class="facebook-primary" data-share-facebook>Abrir Facebook</button>
               <a data-download-image download="bracket-mundial-2026.png" href="${imageUrl}">Descargar imagen</a>
               <button type="button" data-copy-link>Copiar enlace de predicción</button>
               <button type="button" data-close-share>Cerrar</button>
